@@ -1,0 +1,16 @@
+{
+  "name": "contador-asistentes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Contador de asistentes (hombres, mujeres, jóvenes) con guardado en el celular",
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.1",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/preferences": "8.0.1",
+    "@capacitor/share": "8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2"
+  }
+}

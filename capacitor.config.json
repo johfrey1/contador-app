@@ -1,0 +1,6 @@
+{
+  "appId": "com.john.contador",
+  "appName": "Contador",
+  "webDir": "www",
+  "android": { "backgroundColor": "#0E1C45" }
+}
