@@ -1,7 +1,9 @@
 # Contador de asistentes (APK)
 
 ## Generar el APK sin instalar nada en tu PC
-1. Crea un repositorio **privado** en GitHub y sube todo el contenido de esta carpeta (incluida `.github` y `keystore`).
+1. Sube esta carpeta a GitHub (incluida `.github`). La carpeta `keystore` **no** se sube: la firma va como secret.
+   - En tu Mac: `base64 -i keystore/debug.keystore | pbcopy` (copia la firma).
+   - En GitHub: **Settings → Secrets and variables → Actions → New repository secret**. Nombre: `DEBUG_KEYSTORE_BASE64`. Pega el valor y guarda.
 2. Entra a la pestaña **Actions**. El flujo "Construir APK" arranca solo (o dale **Run workflow**).
 3. Cuando termine (unos 5 min), abre la ejecución y descarga **contador-apk** (viene en .zip; adentro está `contador.apk`).
 
@@ -17,7 +19,7 @@
 - En **Guardados → Enviar respaldo** mandas un CSV a WhatsApp o Drive (se abre en Excel).
 
 ## Actualizar
-Cambia `www/index.html`, sube el cambio y descarga el nuevo APK. Instálalo encima: los datos se conservan porque la firma (`keystore/debug.keystore`) es siempre la misma. **No borres esa carpeta.**
+Cambia `www/index.html`, sube el cambio y descarga el nuevo APK. Instálalo encima: los datos se conservan porque la firma (`keystore/debug.keystore`, guardada en el secret `DEBUG_KEYSTORE_BASE64`) es siempre la misma. **No borres esa carpeta ni el secret.**
 
 ## iPhone (sin App Store)
 La misma carpeta `www` funciona como app instalable en iPhone.
