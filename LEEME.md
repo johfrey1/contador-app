@@ -34,6 +34,14 @@ Toca **Compartir** (junto a "Guardado…"). Aparecen dos opciones: **Generar có
 - **Deshacer** quita la última persona registrada en ese celular. Quitar a alguien no la borra: queda marcado quién la quitó y cuándo.
 - **Cerrar y guardar** lo guarda en **Guardados** de todos y empieza un conteo nuevo para todos. Las personas del conteo cerrado quedan guardadas.
 - **Salir del evento** vuelve al conteo propio del celular. Para volver a entrar hace falta un código nuevo.
+
+### Revocar lo compartido
+Quien compartió el conteo ve, en **Compartir**, la lista de **celulares conectados** (con el nombre que pusieron al unirse).
+- **Revocar** junto a un celular: deja de ver y sumar al conteo al instante y vuelve a su conteo propio. Lo que ya registró se queda. Para volver necesita un código nuevo.
+- **Anular este código**: el código que aún no se usó deja de servir.
+- **Dejar de compartir con todos**: revoca a todos los celulares y anula el código pendiente. El conteo sigue en tu celular.
+- Quien invitó a un celular también puede revocarlo. Al que compartió el conteo nadie lo puede revocar.
+- Nada se borra: queda registrado quién revocó a quién y cuándo.
 - Solo los celulares que entraron con un código pueden ver o cambiar el conteo compartido.
 
 ## Actualizar
