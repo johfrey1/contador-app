@@ -41,12 +41,13 @@ function invite(fs, uid, code = "ABCDEFGH", eid = "E1", venceMs = now() + 24 * H
     evento: eid, creadoPor: uid, creado: now(), vence: Timestamp.fromMillis(venceMs), usadoPor: null, usadoEn: null
   });
 }
-function join(fs, uid, code = "ABCDEFGH", eid = "E1") {
+function join(fs, uid, code = "ABCDEFGH", eid = "E1", invitadoPor = "u1") {
   const b = writeBatch(fs);
   b.update(doc(fs, "invitaciones", code), { usadoPor: uid, usadoEn: now() });
-  b.set(doc(fs, "eventos", eid, "miembros", uid), { desde: now(), invitacion: code });
+  b.set(doc(fs, "eventos", eid, "miembros", uid), { desde: now(), invitacion: code, invitadoPor, nombre: "Celular de " + uid, revocado: null, revocadoPor: null });
   return b.commit();
 }
+const revoke = (fs, by, m, eid = "E1") => updateDoc(doc(fs, "eventos", eid, "miembros", m), { revocado: now(), revocadoPor: by });
 // Prepara datos saltándose las reglas
 const seed = fn => env.withSecurityRulesDisabled(ctx => fn(ctx.firestore()));
 
@@ -167,12 +168,12 @@ describe("invitaciones de un solo uso", () => {
     await invite(db("u5"), "u5", "XTRAEVT2", "E2");
     const fs = db("u2"), b = writeBatch(fs);
     b.update(doc(fs, "invitaciones/XTRAEVT2"), { usadoPor: "u2", usadoEn: now() });
-    b.set(doc(fs, "eventos/E1/miembros/u2"), { desde: now(), invitacion: "XTRAEVT2" });
+    b.set(doc(fs, "eventos/E1/miembros/u2"), { desde: now(), invitacion: "XTRAEVT2", invitadoPor: "u5" });
     await assertFails(b.commit());
   });
   test("no se entra sin marcar la invitación como usada", async () => {
     await invite(db("u1"), "u1");
-    await assertFails(setDoc(doc(db("u2"), "eventos/E1/miembros/u2"), { desde: now(), invitacion: "ABCDEFGH" }));
+    await assertFails(setDoc(doc(db("u2"), "eventos/E1/miembros/u2"), { desde: now(), invitacion: "ABCDEFGH", invitadoPor: "u1" }));
   });
   test("no se puede marcar la invitación a nombre de otro ni cambiar su evento", async () => {
     await invite(db("u1"), "u1");
@@ -180,6 +181,13 @@ describe("invitaciones de un solo uso", () => {
     await assertFails(updateDoc(doc(db("u2"), "invitaciones/ABCDEFGH"), { evento: "E2" }));
     // Marcarla usada sin hacerse miembro tampoco (así nadie "quema" invitaciones ajenas)
     await assertFails(updateDoc(doc(db("u2"), "invitaciones/ABCDEFGH"), { usadoPor: "u2", usadoEn: now() }));
+    // Ni siquiera un miembro que ya está adentro
+    await assertFails(updateDoc(doc(db("u1"), "invitaciones/ABCDEFGH"), { usadoPor: "u1", usadoEn: now() }));
+    // No se puede decir que te invitó otro
+    const f2 = db("u2"), b = writeBatch(f2);
+    b.update(doc(f2, "invitaciones/ABCDEFGH"), { usadoPor: "u2", usadoEn: now() });
+    b.set(doc(f2, "eventos/E1/miembros/u2"), { desde: now(), invitacion: "ABCDEFGH", invitadoPor: "u7" });
+    await assertFails(b.commit());
   });
   test("las invitaciones no se pueden listar ni borrar; el código debe tener 8 caracteres válidos", async () => {
     await invite(db("u1"), "u1");
@@ -304,6 +312,70 @@ describe("cerrar, poner en cero y borrar guardados", () => {
     await assertFails(updateDoc(doc(db("u1"), "eventos/E1/conteos/C1"), { motivo: "cero" }));
     await assertFails(deleteDoc(doc(db("u1"), "eventos/E1/conteos/C1")));
     await assertFails(updateDoc(doc(db("u2"), "eventos/E1/miembros/u2"), { desde: 1 }));
+  });
+});
+
+describe("revocar lo compartido", () => {
+  beforeEach(async () => {
+    await createEvent(db("u1"), "u1");
+    await invite(db("u1"), "u1"); await join(db("u2"), "u2");
+    await invite(db("u2"), "u2", "SEGUNDA2"); await join(db("u3"), "u3", "SEGUNDA2", "E1", "u2");
+  });
+  const P = (fs, id = "ana perez") => doc(fs, "eventos/E1/conteos/C1/personas", id);
+
+  test("el dueño revoca a un celular y este pierde el acceso al instante", async () => {
+    await assertSucceeds(revoke(db("u1"), "u1", "u2"));
+    await assertFails(getDoc(doc(db("u2"), "eventos/E1")));
+    await assertFails(getDocs(collection(db("u2"), "eventos/E1/conteos/C1/personas")));
+    await assertFails(setDoc(P(db("u2")), person("u2")));
+    await assertFails(invite(db("u2"), "u2", "DESPUES2"));
+    // Pero puede leer su propia membresía para enterarse
+    await assertSucceeds(getDoc(doc(db("u2"), "eventos/E1/miembros/u2")));
+    // Y el resto sigue contando
+    await assertSucceeds(setDoc(P(db("u3")), person("u3")));
+  });
+  test("quien invitó a un celular puede revocarlo; otro miembro no", async () => {
+    await assertFails(revoke(db("u3"), "u3", "u2"));
+    await assertSucceeds(revoke(db("u2"), "u2", "u3"));
+  });
+  test("al dueño nadie le revoca el acceso", async () => {
+    await assertFails(revoke(db("u2"), "u2", "u1"));
+    await assertFails(revoke(db("u1"), "u1", "u1"));
+  });
+  test("un celular puede salir por su cuenta", async () => {
+    await assertSucceeds(revoke(db("u3"), "u3", "u3"));
+    await assertFails(getDoc(doc(db("u3"), "eventos/E1")));
+  });
+  test("no se revoca a nombre de otro ni dos veces; la revocación no se borra", async () => {
+    await assertFails(revoke(db("u1"), "u2", "u3"));
+    await revoke(db("u1"), "u1", "u2");
+    await assertFails(revoke(db("u1"), "u1", "u2"));
+    await assertFails(updateDoc(doc(db("u1"), "eventos/E1/miembros/u2"), { revocado: null, revocadoPor: null }));
+    await assertFails(updateDoc(doc(db("u2"), "eventos/E1/miembros/u2"), { revocado: null, revocadoPor: null }));
+    await assertFails(deleteDoc(doc(db("u1"), "eventos/E1/miembros/u2")));
+  });
+  test("quien no es miembro no revoca", async () => {
+    await assertFails(revoke(db("u9"), "u9", "u2"));
+  });
+  test("un celular revocado vuelve solo con un código nuevo", async () => {
+    await revoke(db("u1"), "u1", "u2");
+    await assertFails(join(db("u2"), "u2"));                 // el código viejo ya se usó
+    await invite(db("u1"), "u1", "NUEVAAAA");
+    await assertSucceeds(join(db("u2"), "u2", "NUEVAAAA"));
+    await assertSucceeds(getDoc(doc(db("u2"), "eventos/E1")));
+  });
+  test("anular un código antes de que se use", async () => {
+    await invite(db("u1"), "u1", "ANULARLA");
+    await assertFails(updateDoc(doc(db("u3"), "invitaciones/ANULARLA"), { revocado: now() }));   // ni la creó ni es dueño
+    await assertSucceeds(updateDoc(doc(db("u1"), "invitaciones/ANULARLA"), { revocado: now() }));
+    await assertFails(join(db("u5"), "u5", "ANULARLA"));
+    await assertFails(updateDoc(doc(db("u1"), "invitaciones/ANULARLA"), { revocado: null }));
+    await assertFails(deleteDoc(doc(db("u1"), "invitaciones/ANULARLA")));
+  });
+  test("quien creó el código también lo anula; un código usado ya no se anula", async () => {
+    await invite(db("u2"), "u2", "DELDXS22");
+    await assertSucceeds(updateDoc(doc(db("u2"), "invitaciones/DELDXS22"), { revocado: now() }));
+    await assertFails(updateDoc(doc(db("u1"), "invitaciones/ABCDEFGH"), { revocado: now() }));
   });
 });
 

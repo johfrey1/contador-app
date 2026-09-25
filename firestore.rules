@@ -4,6 +4,7 @@ rules_version = '2';
 //  - Nada se borra nunca (delete siempre falso). "Quitar", "poner en cero" y "borrar" solo marcan.
 //  - Cada celular solo ve su propio respaldo.
 //  - Un evento solo lo ven sus miembros. Se entra con un código de invitación de un solo uso que vence.
+//  - Quien comparte puede revocar el acceso de un celular o anular un código (queda registrado, no se borra).
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
@@ -16,9 +17,11 @@ service cloud.firestore {
     function name(v) { return v == null || (v is string && v.size() <= 80); }
     function evento(eid) { return /databases/$(database)/documents/eventos/$(eid); }
     function miembro(eid) { return /databases/$(database)/documents/eventos/$(eid)/miembros/$(uid()); }
-    function isMember(eid) { return signedIn() && exists(miembro(eid)); }
+    // Miembro activo: entró con un código y nadie le revocó el acceso
+    function isMember(eid) { return signedIn() && exists(miembro(eid)) && get(miembro(eid)).data.get('revocado', null) == null; }
     // Para escrituras en tanda que crean la membresía en la misma tanda
-    function isMemberAfter(eid) { return signedIn() && existsAfter(miembro(eid)); }
+    function isMemberAfter(eid) { return signedIn() && existsAfter(miembro(eid)) && getAfter(miembro(eid)).data.get('revocado', null) == null; }
+    function invitacion(code) { return /databases/$(database)/documents/invitaciones/$(code); }
     function conteoActual(eid) { return getAfter(evento(eid)).data.actual; }
 
     // Campos de un conteo guardado (igual en el respaldo y en el evento)
@@ -64,16 +67,21 @@ service cloud.firestore {
     match /invitaciones/{code} {
       allow get: if signedIn();
       allow create: if signedIn() && code.matches('^[A-HJ-NP-Z2-9]{8}$')
-        && d().keys().hasOnly(['evento', 'creadoPor', 'creado', 'vence', 'usadoPor', 'usadoEn'])
+        && d().keys().hasOnly(['evento', 'creadoPor', 'creado', 'vence', 'usadoPor', 'usadoEn', 'revocado'])
         && d().evento is string && isMember(d().evento)
         && d().creadoPor == uid() && d().creado is int
         && d().vence is timestamp && d().vence > request.time && d().vence <= request.time + duration.value(25, 'h')
-        && d().usadoPor == null && d().usadoEn == null;
-      // Usarla: una sola vez, antes de que venza, y en la misma tanda en que se crea la membresía
-      allow update: if signedIn() && resource.data.usadoPor == null && request.time < resource.data.vence
-        && changed().hasOnly(['usadoPor', 'usadoEn'])
-        && d().usadoPor == uid() && d().usadoEn is int
-        && existsAfter(/databases/$(database)/documents/eventos/$(resource.data.evento)/miembros/$(uid()));
+        && d().usadoPor == null && d().usadoEn == null && d().get('revocado', null) == null;
+      allow update: if signedIn() && resource.data.usadoPor == null && resource.data.get('revocado', null) == null && (
+        // Usarla: una sola vez, antes de que venza, y en la misma tanda en que se entra al evento con ella
+        (request.time < resource.data.vence
+          && changed().hasOnly(['usadoPor', 'usadoEn'])
+          && d().usadoPor == uid() && d().usadoEn is int
+          && getAfter(/databases/$(database)/documents/eventos/$(resource.data.evento)/miembros/$(uid())).data.invitacion == code)
+        // Anularla antes de que se use: quien la creó o el dueño del evento
+        || (changed().hasOnly(['revocado']) && d().revocado is int
+          && (resource.data.creadoPor == uid() || get(evento(resource.data.evento)).data.dueno == uid()))
+      );
       allow list, delete: if false;
     }
 
@@ -93,21 +101,42 @@ service cloud.firestore {
       allow list, delete: if false;
 
       match /miembros/{m} {
-        function inv() { return /databases/$(database)/documents/invitaciones/$(d().invitacion); }
-        allow read: if isMember(eid);
-        allow create: if signedIn() && m == uid()
-          && d().keys().hasOnly(['desde', 'invitacion']) && d().desde is int
+        function inv() { return invitacion(d().invitacion); }
+        function fields() {
+          return d().keys().hasOnly(['desde', 'invitacion', 'invitadoPor', 'nombre', 'revocado', 'revocadoPor'])
+            && d().desde is int && (d().get('nombre', null) == null || (d().nombre is string && d().nombre.size() <= 40))
+            && d().get('revocado', null) == null && d().get('revocadoPor', null) == null;
+        }
+        // Entrar con una invitación sin usar ni anular de este evento, que se marca usada en la misma tanda
+        function withInvite() {
+          return d().invitacion is string
+            && get(inv()).data.evento == eid
+            && get(inv()).data.usadoPor == null
+            && get(inv()).data.get('revocado', null) == null
+            && getAfter(inv()).data.usadoPor == uid()
+            && d().get('invitadoPor', null) == get(inv()).data.creadoPor;
+        }
+        // Cada celular puede leer su propia membresía (así se entera si le revocaron el acceso)
+        allow read: if isMember(eid) || (signedIn() && m == uid());
+        allow create: if signedIn() && m == uid() && fields()
           && (
             // El dueño al crear el evento
-            (d().invitacion == null && getAfter(evento(eid)).data.dueno == uid()
-              && !exists(evento(eid)))
-            // Cualquiera con una invitación sin usar de este evento, que usa en la misma tanda
-            || (d().invitacion is string
-              && get(inv()).data.evento == eid
-              && get(inv()).data.usadoPor == null
-              && getAfter(inv()).data.usadoPor == uid())
+            (d().invitacion == null && d().get('invitadoPor', null) == null
+              && getAfter(evento(eid)).data.dueno == uid() && !exists(evento(eid)))
+            || withInvite()
           );
-        allow update, delete: if false;
+        allow update: if signedIn() && (
+          // Revocar: el dueño, quien invitó a ese celular, o el propio celular al salir. Al dueño no se le revoca.
+          (resource.data.get('revocado', null) == null
+            && changed().hasOnly(['revocado', 'revocadoPor'])
+            && d().revocado is int && d().revocadoPor == uid()
+            && m != get(evento(eid)).data.dueno
+            && (m == uid()
+              || (isMember(eid) && (get(evento(eid)).data.dueno == uid() || resource.data.get('invitadoPor', null) == uid()))))
+          // Volver a entrar después de una revocación: solo con una invitación nueva
+          || (m == uid() && resource.data.get('revocado', null) != null && fields() && withInvite())
+        );
+        allow delete: if false;
       }
 
       match /conteos/{cid} {

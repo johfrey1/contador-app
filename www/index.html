@@ -209,6 +209,12 @@ body.kb .nav{display:none}
 .bigcode{font-size:2.3rem;font-weight:900;letter-spacing:.12em;text-align:center;padding:18px 8px;border-radius:20px;background:var(--bg);
   border:1.5px dashed var(--line);margin-bottom:16px;-webkit-user-select:all;user-select:all}
 .panel .gap{margin-top:10px}
+#syncOn{max-height:70vh;overflow-y:auto}
+.member{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;background:var(--bg);border:1.5px solid var(--line);margin-bottom:8px}
+.member .mn{flex:1;min-width:0}
+.member .mn b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.member .mn span{color:var(--muted);font-size:.85rem}
+.member .rv{border:1.5px solid color-mix(in srgb,var(--m) 55%,transparent);background:none;color:var(--m);border-radius:12px;padding:8px 12px;font-weight:700;flex:none}
 .opt{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px;margin-bottom:12px;border-radius:22px;
   border:1.5px solid var(--line);background:var(--card-2)}
 .opt:active{transform:scale(.99)}
@@ -369,6 +375,7 @@ body.kb .nav{display:none}
     <div id="syncJoin">
       <p>Escribe el código de 8 letras que te enviaron. Cada código sirve para un solo celular.</p>
       <input class="field code" id="code" placeholder="XXXX-XXXX" maxlength="9" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      <input class="field" id="myName" placeholder="Tu nombre (para que sepan quién eres)" maxlength="40" autocomplete="off" autocapitalize="words" enterkeyhint="go">
       <div class="acts">
         <button class="btn" id="joinBack">Volver</button>
         <button class="btn primary" id="join">Unirse</button>
@@ -381,10 +388,14 @@ body.kb .nav{display:none}
         <button class="btn" id="newCode">Nuevo código</button>
         <button class="btn primary" id="shareCode">Compartir código</button>
       </div>
+      <button class="link" id="voidCode">Anular este código</button>
+      <div class="section" style="margin:16px 4px 8px">CELULARES CONECTADOS</div>
+      <div id="members"></div>
       <div class="acts gap">
         <button class="btn" id="leave">Salir del evento</button>
         <button class="btn" id="syncClose">Cerrar</button>
       </div>
+      <button class="btn danger full gap" id="stopShare">Dejar de compartir con todos</button>
     </div>
     <div class="err" id="syncErr" role="alert" style="margin:12px 0 0"></div>
   </div>
@@ -423,7 +434,7 @@ body.kb .nav{display:none}
       localStorage.setItem(k,s); }catch(e){} }
   };
 
-  const KEY_CUR="contador:actual", KEY_HIST="contador:historial", KEY_THEME="contador:tema", KEY_PEOPLE="contador:personas", KEY_EVT="contador:evento", KEY_DISC="contador:descartados";
+  const KEY_CUR="contador:actual", KEY_HIST="contador:historial", KEY_THEME="contador:tema", KEY_PEOPLE="contador:personas", KEY_EVT="contador:evento", KEY_DISC="contador:descartados", KEY_NAME="contador:minombre";
   // Categorías actuales. "j" (Jóvenes) es de versiones anteriores: solo se muestra si hay datos viejos.
   const CATS=["h","m","ah","am"], ALL=CATS.concat("j");
   const FIELD={h:"hombres",m:"mujeres",ah:"adolHombres",am:"adolMujeres",j:"jovenes"};
@@ -594,7 +605,8 @@ body.kb .nav{display:none}
   const ev=(eid,...p)=>fb.F.doc(fb.db,"eventos",eid,...p);
   const pRef=(eid,cid,id)=>ev(eid,"conteos",cid,"personas",id);
   const personData=(k,n,t)=>({k,n,t,por:fb.uid,quitado:null,quitadoPor:null});
-  let actual=null, sharedPeople=[], sharedHist=[], unsubs=[], pUnsub=null;
+  let actual=null, sharedPeople=[], sharedHist=[], members=[], dueno=null, unsubs=[], pUnsub=null;
+  let myName = await store.get(KEY_NAME,""); if(typeof myName!=="string") myName="";
   function setStatus(txt,cls){ $("status").className="status"+(cls?" "+cls:""); $("statusTxt").textContent=txt; }
   function syncStatus(meta){
     if(meta.hasPendingWrites) setStatus(navigator.onLine?"Enviando…":"Sin conexión · se envía al volver","offline");
@@ -612,13 +624,33 @@ body.kb .nav{display:none}
     cur=evt?sharedCur():solo; render();
     if(view==="people"&&!pSrc) renderAll(); else if(view==="chart") renderChart(); else if(view==="saved") renderList();
   }
-  function stopListening(){ unsubs.forEach(f=>f()); unsubs=[]; if(pUnsub) pUnsub(); pUnsub=null; actual=null; sharedPeople=[]; sharedHist=[]; }
+  function stopListening(){ unsubs.forEach(f=>f()); unsubs=[]; if(pUnsub) pUnsub(); pUnsub=null; actual=null; sharedPeople=[]; sharedHist=[]; members=[]; dueno=null; }
+  // Quien compartía le quitó el acceso a este celular: vuelve a su conteo propio sin perder nada
+  async function revoked(){
+    if(!evt) return;
+    if(sumK(cur)>0){ disc.unshift(Object.assign({id:"rev-"+Date.now(),respaldo:false},snapshotOf(cur,"Conteo compartido (acceso revocado)"))); store.set(KEY_DISC,disc); scheduleBackup(0); }
+    stopListening(); evt=null; store.set(KEY_EVT,null);
+    closeSheet(syncSheet); refresh(); setStatus("Guardado automático en el celular"); soloStatus();
+    await ask({title:"Ya no estás en el conteo compartido",safe:true,ok:"Entendido",
+      msg:"Quien compartía el conteo le quitó el acceso a este celular. Lo que registraste quedó en el conteo compartido y una copia en tu respaldo. Para volver pide un código nuevo."});
+  }
   async function listen(){
     stopListening(); setStatus("Conectando…","offline");
     try{ await initFb(); }catch(e){ setStatus("Sin conexión · el evento se abre al tener internet","error"); return; }
     const F=fb.F, eid=evt.id, mine=()=>evt&&evt.id===eid;
+    // Mi propia membresía: si me revocan el acceso me entero aquí
+    unsubs.push(F.onSnapshot(ev(eid,"miembros",fb.uid),snap=>{
+      if(!mine()||!snap.exists()) return;
+      const m=snap.data(); if(m.revocado!=null&&m.revocadoPor!==fb.uid) revoked();
+    },()=>{}));
+    unsubs.push(F.onSnapshot(F.collection(fb.db,"eventos",eid,"miembros"),snap=>{
+      if(!mine()) return;
+      members=snap.docs.map(x=>Object.assign({id:x.id},x.data())).filter(m=>m.revocado==null).sort((a,b)=>a.desde-b.desde);
+      renderMembers();
+    },()=>{}));
     unsubs.push(F.onSnapshot(ev(eid),snap=>{
       if(!mine()||!snap.exists()) return;
+      dueno=snap.data().dueno; renderMembers();
       const cid=snap.data().actual; if(cid===actual) return;
       actual=cid; if(pUnsub) pUnsub(); sharedPeople=[]; evt.mine=[]; store.set(KEY_EVT,evt); refresh();
       pUnsub=F.onSnapshot(F.query(F.collection(fb.db,"eventos",eid,"conteos",cid,"personas"),F.orderBy("t")),{includeMetadataChanges:true},s=>{
@@ -1108,15 +1140,44 @@ body.kb .nav{display:none}
   const fmtCode=c=>c?c.slice(0,4)+"-"+c.slice(4):"—";
   const invValid=()=>evt&&evt.inv&&evt.inv.vence>Date.now()+60000;
   function showInv(){
+    $("voidCode").style.display=invValid()?"block":"none";
     $("bigcode").textContent=invValid()?fmtCode(evt.inv.code):"—";
     $("invTxt").textContent=invValid()?"Este código sirve para UN solo celular. Vence el "+fmt(evt.inv.vence):"Toca \"Nuevo código\" para invitar a otro celular.";
+  }
+  const isOwner=()=>!!(fb&&dueno===fb.uid);
+  function renderMembers(){
+    const box=$("members"); if(!box) return; box.textContent="";
+    $("stopShare").style.display=isOwner()&&members.length>1?"block":"none";
+    members.forEach(m=>{
+      const r=document.createElement("div"); r.className="member";
+      const t=document.createElement("div"); t.className="mn";
+      const b=document.createElement("b"); b.textContent=(m.nombre||"Celular sin nombre")+(m.id===fb.uid?" (tú)":"");
+      const sp=document.createElement("span"); sp.textContent=(m.id===dueno?"Compartió el conteo · ":"Entró ")+fmt(m.desde);
+      t.append(b,sp); r.appendChild(t);
+      if(m.id!==fb.uid&&m.id!==dueno&&(isOwner()||m.invitadoPor===fb.uid)){
+        const x=document.createElement("button"); x.className="rv"; x.textContent="Revocar";
+        x.addEventListener("click",()=>revokeMember(m)); r.appendChild(x);
+      }
+      box.appendChild(r);
+    });
+  }
+  async function revokeMember(m){
+    if(!await ask({title:"Revocar acceso",ok:"Revocar",
+      msg:"\""+(m.nombre||"Celular sin nombre")+"\" dejará de ver y sumar al conteo compartido. Lo que ya registró se queda. Para volver necesitará un código nuevo."})) return;
+    fb.F.updateDoc(ev(evt.id,"miembros",m.id),{revocado:Date.now(),revocadoPor:fb.uid}).then(()=>toast("Acceso revocado")).catch(failed);
+  }
+  async function voidInvite(){
+    if(!invValid()) return;
+    const code=evt.inv.code;
+    await fb.F.updateDoc(fb.F.doc(fb.db,"invitaciones",code),{revocado:Date.now()});
+    evt.inv=null; store.set(KEY_EVT,evt); showInv();
   }
   async function openSync(){
     $("syncErr").textContent=""; $("code").value="";
     syncView(evt?"on":"menu");
     syncSheet.classList.add("open");
-    if(!evt) return;
-    showInv();
+    if(!evt){ $("myName").value=myName; return; }
+    showInv(); renderMembers();
     // Si el código ya lo usó otro celular, se ofrece uno nuevo
     if(invValid()&&fb) try{
       const s=await fb.F.getDocFromServer(fb.F.doc(fb.db,"invitaciones",evt.inv.code));
@@ -1136,11 +1197,12 @@ body.kb .nav{display:none}
   $("syncClose").addEventListener("click",closeSync);
   syncSheet.addEventListener("click",e=>{ if(e.target===syncSheet) closeSync(); });
   $("code").addEventListener("input",e=>{ const v=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,8); e.target.value=v.length>4?v.slice(0,4)+"-"+v.slice(4):v; });
-  $("code").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("join").click(); } });
+  $("code").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("myName").focus(); } });
+  $("myName").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("join").click(); } });
 
   const say=msg=>Object.assign(new Error(msg),{say:msg});
   async function busy(btn,fn){
-    const bs=[$("create"),$("goJoin"),$("join"),$("newCode"),$("shareCode")], old=btn.innerHTML, lbl=btn.querySelector("b")||btn;
+    const bs=[$("create"),$("goJoin"),$("join"),$("newCode"),$("shareCode"),$("voidCode")], old=btn.innerHTML, lbl=btn.querySelector("b")||btn;
     bs.forEach(x=>x.disabled=true); lbl.textContent="Conectando…"; $("syncErr").textContent="";
     try{ await fn(); }
     catch(e){ $("syncErr").textContent=e&&e.say?e.say:navigator.onLine?"No se pudo conectar. Intenta de nuevo.":"Necesitas internet para esto."; }
@@ -1151,7 +1213,7 @@ body.kb .nav{display:none}
     for(let i=0;i<5;i++){
       const code=randCode(8), vence=Date.now()+H24;
       try{
-        await F.setDoc(F.doc(db,"invitaciones",code),{evento:evt.id,creadoPor:uid,creado:Date.now(),vence:F.Timestamp.fromMillis(vence),usadoPor:null,usadoEn:null});
+        await F.setDoc(F.doc(db,"invitaciones",code),{evento:evt.id,creadoPor:uid,creado:Date.now(),vence:F.Timestamp.fromMillis(vence),usadoPor:null,usadoEn:null,revocado:null});
         evt.inv={code,vence}; store.set(KEY_EVT,evt); return code;
       }catch(e){ if(!navigator.onLine) throw e; } // código repetido: se prueba otro
     }
@@ -1173,7 +1235,7 @@ body.kb .nav{display:none}
     const {F,db,uid}=await initFb(), eid=randId(), cid=randId(), b=F.writeBatch(db);
     b.set(ev(eid),{dueno:uid,actual:cid,creado:Date.now(),actualizado:Date.now()});
     b.set(ev(eid,"conteos",cid),{creado:Date.now(),por:uid,anterior:null,motivo:"inicio"});
-    b.set(ev(eid,"miembros",uid),{desde:Date.now(),invitacion:null});
+    b.set(ev(eid,"miembros",uid),{desde:Date.now(),invitacion:null,invitadoPor:null,nombre:myName||null,revocado:null,revocadoPor:null});
     await b.commit();
     if(sumK(solo)>0) await moveSolo(eid,cid,new Set());
     const sent=await uploadHist(eid);
@@ -1183,6 +1245,7 @@ body.kb .nav{display:none}
   $("join").addEventListener("click",()=>{
     const code=$("code").value.toUpperCase().replace(/[^A-Z0-9]/g,"");
     if(code.length!==8){ $("syncErr").textContent="El código tiene 8 letras o números."; return; }
+    myName=$("myName").value.trim().slice(0,40); store.set(KEY_NAME,myName);
     busy($("join"),async()=>{
       const {F,db,uid}=await initFb();
       const inv=await F.getDocFromServer(F.doc(db,"invitaciones",code));
@@ -1191,11 +1254,12 @@ body.kb .nav{display:none}
       // ¿Ya es miembro? (volver a un evento del que salió): no gasta el código
       let member=true; try{ await F.getDocFromServer(ev(eid)); }catch(e){ member=false; }
       if(!member){
+        if(v.revocado) throw say("Ese código fue anulado por quien lo compartió. Pide uno nuevo.");
         if(v.usadoPor) throw say("Ese código ya se usó. Cada código sirve para un solo celular: pide uno nuevo.");
         if(v.vence.toMillis()<=Date.now()) throw say("Ese código ya venció. Pide uno nuevo.");
         const b=F.writeBatch(db);
         b.update(F.doc(db,"invitaciones",code),{usadoPor:uid,usadoEn:Date.now()});
-        b.set(ev(eid,"miembros",uid),{desde:Date.now(),invitacion:code});
+        b.set(ev(eid,"miembros",uid),{desde:Date.now(),invitacion:code,invitadoPor:v.creadoPor,nombre:myName||null,revocado:null,revocadoPor:null});
         await b.commit();
       }
       const cid=(await F.getDocFromServer(ev(eid))).data().actual, n=sumK(solo);
@@ -1212,7 +1276,7 @@ body.kb .nav{display:none}
   $("shareCode").addEventListener("click",()=>busy($("shareCode"),async()=>{
     if(!invValid()) await newInvite();
     showInv();
-    const text="Únete a mi conteo en Contador MIRA: toca Compartir → Unirse y escribe el código "+fmtCode(evt.inv.code)+" (sirve para un solo celular).";
+    const text="Únete a mi conteo en Contador MIRA: toca Compartir → Ingresar código y escribe "+fmtCode(evt.inv.code)+" (sirve para un solo celular).";
     try{
       if(Share) await Share.share({title:"Código para contar juntos",text,dialogTitle:"Compartir código"});
       else if(navigator.share) await navigator.share({title:"Código para contar juntos",text});
@@ -1221,8 +1285,20 @@ body.kb .nav{display:none}
   }));
   $("leave").addEventListener("click",async()=>{
     if(!await ask({title:"Salir del evento",safe:true,ok:"Salir",msg:"El conteo compartido sigue en los otros celulares y queda guardado en Firebase. Para volver necesitas un código nuevo. Este celular vuelve a su conteo propio."})) return;
+    // Queda registrado que salió (así quien compartió ya no lo ve en la lista)
+    if(fb&&!isOwner()) fb.F.updateDoc(ev(evt.id,"miembros",fb.uid),{revocado:Date.now(),revocadoPor:fb.uid}).catch(()=>{});
     stopListening(); evt=null; store.set(KEY_EVT,null);
     closeSync(); refresh(); setStatus("Guardado automático en el celular"); soloStatus();
+  });
+  $("voidCode").addEventListener("click",()=>busy($("voidCode"),async()=>{ await voidInvite(); toast("Código anulado: ya no sirve"); }));
+  $("stopShare").addEventListener("click",async()=>{
+    const others=members.filter(m=>m.id!==fb.uid);
+    if(!await ask({title:"Dejar de compartir",word:true,ok:"Dejar de compartir",
+      msg:"Se quitará el acceso a "+(others.length===1?"1 celular":others.length+" celulares")+" y se anulará el código pendiente. El conteo sigue en este celular y todo queda guardado en Firebase."})) return;
+    const b=fb.F.writeBatch(fb.db);
+    others.forEach(m=>b.update(ev(evt.id,"miembros",m.id),{revocado:Date.now(),revocadoPor:fb.uid}));
+    b.commit().then(()=>toast("Ya no compartes el conteo")).catch(failed);
+    voidInvite().catch(()=>{});
   });
   if(App) App.addListener("resume",()=>scheduleBackup(500));
 

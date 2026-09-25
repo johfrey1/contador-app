@@ -49,7 +49,7 @@ Proyecto `contador-app-54f65` (plan gratuito Spark), con Firestore e inicio de s
 
 - Al cerrar o poner en cero se crea otro conteo y el evento apunta a él; el anterior queda intacto.
 - El celular respalda automáticamente al abrir la app, tras cada cambio y al volver la conexión. Un Guardado local solo se puede quitar de la lista si ya está respaldado.
-- Pruebas de las reglas (40 casos, necesita Java): `npm run test:rules`.
+- Pruebas de las reglas (49 casos, necesita Java): `npm run test:rules`.
 - Probar la app contra los emuladores: `firebase emulators:start --only auth,firestore` y abrir `http://localhost:PUERTO/?emulador`.
 - Si cambias `firestore.rules`, publícalas en Firebase → Firestore Database → Reglas (o `firebase deploy --only firestore:rules`).
 - Para actualizar el SDK: cambia la versión de `firebase` en `package.json`, `npm install` y `npm run build:firebase`.
