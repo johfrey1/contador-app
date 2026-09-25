@@ -19,14 +19,16 @@
 - En **Guardados → Enviar respaldo** mandas un CSV a WhatsApp o Drive (se abre en Excel).
 
 ## Contar con varios celulares a la vez
-1. En un celular toca el botón de **personas** (arriba a la derecha) → **Crear evento compartido**. Aparece un código de 6 letras, por ejemplo `46A7VF`.
+1. En el celular que ya tiene datos toca **Compartir** (junto a "Guardado automático") → **Crear evento compartido**. Aparece un código de 6 letras, por ejemplo `Y3AED4`.
+   - El conteo que tenías abierto y todos tus **Guardados** se suben a Firebase y quedan en el evento.
 2. Toca **Compartir código** y mándalo por WhatsApp a los demás.
-3. En cada otro celular: botón de **personas** → escribe el código → **Unirse**.
-4. Listo: cada toque en cualquier celular se suma al mismo total y todos lo ven al instante. El botón de personas se pone verde cuando estás en un evento.
+3. En cada otro celular: **Compartir** → escribe el código → **Unirse**. Si ese celular tenía un conteo abierto, pregunta si quieres sumarlo al evento (las personas repetidas no se cuentan dos veces). Sus Guardados también se suben.
+4. Listo: cada persona que registres en cualquier celular aparece en todos al instante. El botón muestra el código en verde mientras estás en un evento.
+- Una persona solo se puede registrar una vez por evento, aunque lo intenten desde dos celulares.
 - Para crear o unirse hace falta internet. Después, si se va la señal, sigue contando y lo envía solo cuando vuelve.
 - **Cerrar y guardar** guarda el conteo en **Guardados** de todos los celulares y lo pone en cero para todos.
-- **Deshacer** quita solo el último toque hecho en ese celular.
-- **Salir del evento** vuelve al conteo normal de ese celular; el evento sigue en los demás y puedes volver con el mismo código.
+- **Deshacer** quita solo la última persona registrada en ese celular.
+- **Salir del evento** vuelve al conteo propio de ese celular; el evento sigue en los demás y puedes volver con el mismo código. Los Guardados que tenías siguen en el celular.
 
 ## Actualizar
 Cambia `www/index.html`, sube el cambio y descarga el nuevo APK. Instálalo encima: los datos se conservan porque la firma (`keystore/debug.keystore`, guardada en el secret `DEBUG_KEYSTORE_BASE64`) es siempre la misma. **No borres esa carpeta ni el secret.**

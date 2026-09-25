@@ -196,6 +196,19 @@ body.kb .nav{display:none}
   background:linear-gradient(160deg,#25C26E,#128C4B);color:#fff;font-weight:800;font-size:1.02rem}
 .shareImg svg{width:22px;height:22px}
 .shareImg:disabled{opacity:.6}
+.status #statusTxt{flex:1;min-width:0}
+.status.offline .dot{background:var(--muted)}
+.status.error .dot{background:var(--m)}
+.syncPill{display:flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:var(--card-2);border-radius:999px;
+  padding:6px 12px;font-weight:700;font-size:.85rem;color:var(--ink);flex:none;letter-spacing:.04em}
+.syncPill svg{width:18px;height:18px}
+.syncPill.linked{border-color:var(--ok);color:var(--ok)}
+.btn.full{width:100%;flex:none}
+.or{text-align:center;color:var(--muted);margin:16px 0 12px;font-size:.9rem}
+.field.code{text-align:center;letter-spacing:.3em;font-weight:800;text-transform:uppercase;font-size:1.5rem}
+.bigcode{font-size:2.6rem;font-weight:900;letter-spacing:.2em;text-align:center;padding:18px 8px;border-radius:20px;background:var(--bg);
+  border:1.5px dashed var(--line);margin-bottom:16px;-webkit-user-select:all;user-select:all}
+.panel .gap{margin-top:10px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(112px + env(safe-area-inset-bottom,0px));
   background:var(--ok);color:#fff;font-weight:700;padding:12px 20px;border-radius:16px;opacity:0;transition:opacity .2s;z-index:20;pointer-events:none}
 .toast.show{opacity:1}
@@ -218,7 +231,12 @@ body.kb .nav{display:none}
     </button>
     </div>
   </div>
-  <div class="status" id="status"><i class="dot"></i><span id="statusTxt">Guardado automático activo</span></div>
+  <div class="status" id="status"><i class="dot"></i><span id="statusTxt">Guardado automático activo</span>
+    <button class="syncPill" id="sync" aria-label="Contar con otros celulares">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.5a6.5 6.5 0 0 1 3 5.5"/></svg>
+      <span id="syncLbl">Compartir</span>
+    </button>
+  </div>
 
   <div class="totalCard">
     <div class="t-l">Total asistentes<span id="started">Conteo nuevo</span></div>
@@ -301,7 +319,7 @@ body.kb .nav{display:none}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t">
   <div class="panel">
     <h2 id="sh-t">Cerrar conteo</h2>
-    <p>Queda en Guardados y el contador vuelve a cero.</p>
+    <p id="sh-p">Queda en Guardados y el contador vuelve a cero.</p>
     <div class="sum" id="sum"></div>
     <input class="field" id="name" placeholder="Nombre del evento (opcional)" maxlength="60" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">
     <div class="acts">
@@ -322,6 +340,32 @@ body.kb .nav{display:none}
       <button type="submit" class="btn primary" id="addOk">Sumar 1</button>
     </div>
   </form>
+</div>
+<!-- Contar con otros celulares -->
+<div class="sheet" id="syncSheet" role="dialog" aria-modal="true" aria-labelledby="sy-t">
+  <div class="panel">
+    <h2 id="sy-t">Contar con otros celulares</h2>
+    <div id="syncOff">
+      <p>Crea un evento y comparte el código. Todos los celulares con ese código suman al mismo conteo en tiempo real. Tu conteo actual y tus Guardados se suben al evento.</p>
+      <button class="btn primary full" id="create">Crear evento compartido</button>
+      <div class="or">o únete con un código</div>
+      <input class="field code" id="code" placeholder="CÓDIGO" maxlength="6" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      <div class="acts">
+        <button class="btn" id="syncCancel">Cancelar</button>
+        <button class="btn primary" id="join">Unirse</button>
+      </div>
+    </div>
+    <div id="syncOn">
+      <p>Comparte este código con los demás celulares:</p>
+      <div class="bigcode" id="bigcode"></div>
+      <div class="acts">
+        <button class="btn" id="leave">Salir del evento</button>
+        <button class="btn primary" id="shareCode">Compartir código</button>
+      </div>
+      <button class="btn full gap" id="syncClose">Cerrar</button>
+    </div>
+    <div class="err" id="syncErr" role="alert" style="margin:12px 0 0"></div>
+  </div>
 </div>
 <!-- Confirmación para acciones que borran datos -->
 <div class="sheet" id="askSheet" role="alertdialog" aria-modal="true" aria-labelledby="ask-t" aria-describedby="ask-m">
@@ -357,7 +401,7 @@ body.kb .nav{display:none}
       localStorage.setItem(k,s); }catch(e){} }
   };
 
-  const KEY_CUR="contador:actual", KEY_HIST="contador:historial", KEY_THEME="contador:tema", KEY_PEOPLE="contador:personas";
+  const KEY_CUR="contador:actual", KEY_HIST="contador:historial", KEY_THEME="contador:tema", KEY_PEOPLE="contador:personas", KEY_EVT="contador:evento";
   // Categorías actuales. "j" (Jóvenes) es de versiones anteriores: solo se muestra si hay datos viejos.
   const CATS=["h","m","ah","am"], ALL=CATS.concat("j");
   const FIELD={h:"hombres",m:"mujeres",ah:"adolHombres",am:"adolMujeres",j:"jovenes"};
@@ -384,6 +428,11 @@ body.kb .nav{display:none}
   ALL.forEach(k=>{ cur[k]=+cur[k]||0; });
   let hist = await store.get(KEY_HIST,[]); if(!Array.isArray(hist)) hist=[];
   let people = await store.get(KEY_PEOPLE,{}); if(!people||typeof people!=="object") people={};
+  // Evento compartido al que está unido este celular: {code, mine:[ids de personas que registró este celular]} o null
+  let evt = await store.get(KEY_EVT,null); if(!evt||typeof evt.code!=="string") evt=null;
+  if(evt&&!Array.isArray(evt.mine)) evt.mine=[];
+  // Conteo propio del celular (lo único que se guarda en KEY_CUR). Con evento, "cur" muestra el conteo del evento.
+  let solo=cur;
 
   const applyTheme=()=>{ theme==="light"?document.documentElement.setAttribute("data-theme","light"):document.documentElement.removeAttribute("data-theme"); };
   applyTheme();
@@ -394,7 +443,8 @@ body.kb .nav{display:none}
     CATS.forEach(k=>{ $("n-"+k).textContent=cur[k]; });
     $("tot").textContent=total();
     $("started").textContent=(cur.inicio?"Desde "+fmt(cur.inicio):"Conteo nuevo")+(cur.j?" · Jóvenes (versión anterior): "+cur.j:"");
-    $("undo").disabled=cur.taps.length===0; $("reset").disabled=total()===0; $("fab").disabled=total()===0;
+    $("undo").disabled=evt?!evt.mine.length:cur.taps.length===0; $("reset").disabled=total()===0; $("fab").disabled=total()===0;
+    $("sync").classList.toggle("linked",!!evt); $("syncLbl").textContent=evt?evt.code:"Compartir";
     renderPeople();
   }
   function personRow(p,onRemove){
@@ -421,7 +471,8 @@ body.kb .nav{display:none}
     b.addEventListener("click",()=>openPeople(null)); box.appendChild(b);
   }
   function autosave(){
-    cur.updatedAt=Date.now(); store.set(KEY_CUR,cur); render();
+    if(evt){ render(); return; } // el conteo del evento vive en Firebase
+    cur.updatedAt=Date.now(); solo=cur; store.set(KEY_CUR,cur); render();
     $("statusTxt").textContent="Guardado en el celular · "+new Date().toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"});
   }
 
@@ -429,8 +480,9 @@ body.kb .nav{display:none}
   const closeSheet=sh=>{ const a=document.activeElement; if(a&&a.blur) a.blur(); sh.classList.remove("open"); };
   // Confirmación propia (no el confirm() del sistema). Con word:true exige escribir BORRAR.
   const askSheet=$("askSheet"); let askDone=null;
-  function ask({title,msg,ok,word}){
+  function ask({title,msg,ok,word,safe}){
     $("ask-t").textContent=title; $("ask-m").textContent=msg; $("askYes").textContent=ok||"Borrar";
+    $("askYes").className="btn "+(safe?"primary":"danger");
     $("askWordBox").style.display=word?"":"none"; $("askWord").value=""; $("askYes").disabled=!!word;
     askSheet.classList.add("open"); buzz(40);
     if(word) $("askWord").focus(); else $("askNo").focus();
@@ -446,6 +498,103 @@ body.kb .nav{display:none}
     const t=$("toast"); t.textContent=msg; t.classList.toggle("bad",!!bad); t.classList.add("show");
     clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("show"),1800);
   }
+
+  // ---------- Sincronización entre celulares (Firebase) ----------
+  const FB_CONFIG={
+    apiKey:"AIzaSyDOIuDttfzVRFAORfcF8kUyWsgWyB5ns6M",
+    authDomain:"contador-app-54f65.firebaseapp.com",
+    projectId:"contador-app-54f65",
+    storageBucket:"contador-app-54f65.firebasestorage.app",
+    messagingSenderId:"862536289329",
+    appId:"1:862536289329:web:0d2eea4231f694fc845910"
+  };
+  const CODE_CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0/O ni 1/I para no confundir
+  let fbReady=null, fb=null;
+  function initFb(){
+    if(!fbReady) fbReady=(async()=>{
+      const F=await import("./vendor/firebase.js");
+      const app=F.initializeApp(FB_CONFIG);
+      const auth=F.initializeAuth(app,{persistence:[F.indexedDBLocalPersistence,F.browserLocalPersistence]});
+      const db=F.initializeFirestore(app,{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})});
+      const user=await new Promise(res=>{ const off=F.onAuthStateChanged(auth,u=>{ off(); res(u); }); });
+      if(!user) await F.signInAnonymously(auth);
+      fb={F,db}; return fb;
+    })().catch(e=>{ fbReady=null; throw e; });
+    return fbReady;
+  }
+  // Cada persona del evento es un documento cuyo id es su nombre normalizado: así nadie se cuenta dos veces,
+  // aunque la registren en celulares distintos (las reglas no dejan sobrescribir un documento).
+  const pRef=(code,id)=>fb.F.doc(fb.db,"eventos",code,"personas",id);
+  const gRef=(code,id)=>fb.F.doc(fb.db,"eventos",code,"guardados",id);
+  const rid=()=>Math.random().toString(36).slice(2,10);
+  let sharedPeople=[], sharedHist=[], unsubs=[];
+  function setStatus(txt,cls){ $("status").className="status"+(cls?" "+cls:""); $("statusTxt").textContent=txt; }
+  function syncStatus(meta){
+    if(meta.hasPendingWrites) setStatus(navigator.onLine?"Enviando…":"Sin conexión · se envía al volver","offline");
+    else if(meta.fromCache) setStatus("Sin conexión","offline");
+    else setStatus("Sincronizado · "+hora(Date.now()));
+  }
+  // El conteo del evento con la misma forma que el conteo local, para que pantallas y gráficas funcionen igual
+  function sharedCur(){
+    const v=blank();
+    sharedPeople.forEach(p=>{ if(p.k in v) v[p.k]++; v.taps.push(p.n?{k:p.k,n:p.n,t:p.t,id:p.id}:p.k); });
+    v.inicio=sharedPeople.length?sharedPeople[0].t:null;
+    return v;
+  }
+  function refresh(){
+    cur=evt?sharedCur():solo; render();
+    if(view==="people"&&!pSrc) renderAll(); else if(view==="chart") renderChart(); else if(view==="saved") renderList();
+  }
+  function stopListening(){ unsubs.forEach(f=>f()); unsubs=[]; sharedPeople=[]; sharedHist=[]; }
+  async function listen(){
+    stopListening(); setStatus("Conectando…","offline");
+    try{ await initFb(); }catch(e){ setStatus("No se pudo conectar al evento","error"); return; }
+    const F=fb.F, code=evt.code, mine=()=>evt&&evt.code===code;
+    unsubs.push(F.onSnapshot(F.query(F.collection(fb.db,"eventos",code,"personas"),F.orderBy("t")),{includeMetadataChanges:true},snap=>{
+      if(!mine()) return;
+      sharedPeople=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+      refresh(); syncStatus(snap.metadata);
+    },()=>setStatus("Sin permiso para leer el evento","error")));
+    unsubs.push(F.onSnapshot(F.query(F.collection(fb.db,"eventos",code,"guardados"),F.orderBy("fecha","desc"),F.limit(300)),snap=>{
+      if(!mine()) return;
+      sharedHist=snap.docs.map(d=>Object.assign({},d.data(),{id:d.id,shared:true}));
+      if(view==="saved") renderList(); else if(view==="chart") renderChart();
+    },()=>{}));
+  }
+  const failed=()=>toast("No se guardó un cambio en el evento",true);
+  // Firestore acepta hasta 500 cambios por tanda
+  async function inBatches(ops){
+    for(let i=0;i<ops.length;i+=400){ const b=fb.F.writeBatch(fb.db); ops.slice(i,i+400).forEach(op=>op(b)); await b.commit(); }
+  }
+  const toInt=v=>Math.max(0,Math.round(+v||0));
+  // Conteo guardado con el formato que aceptan las reglas (rellena campos que no existían en versiones viejas)
+  function cleanSaved(it){
+    const o={nombre:String(it.nombre||"").slice(0,60),total:toInt(it.total),fecha:toInt(it.fecha)||Date.now(),inicio:it.inicio?toInt(it.inicio):null,
+      asistentes:(Array.isArray(it.asistentes)?it.asistentes:[]).filter(p=>p&&p.n).map(p=>({k:String(p.k),n:String(p.n),t:toInt(p.t)}))};
+    ALL.forEach(k=>o[FIELD[k]]=toInt(it[FIELD[k]]));
+    return o;
+  }
+  // Personas de un conteo local como documentos del evento. Los toques sin nombre (versiones viejas) van sin nombre.
+  function peopleOps(code,src,skip){
+    const ops=[], byK={};
+    named(src.taps).forEach(p=>{
+      const id=norm(p.n); byK[p.k]=(byK[p.k]||0)+1;
+      if(!id||skip.has(id)) return; skip.add(id);
+      const d={k:p.k,n:p.n,t:toInt(p.t)||Date.now()}; ops.push(b=>b.set(pRef(code,id),d));
+    });
+    ALL.forEach(k=>{ for(let i=byK[k]||0;i<(src[k]||0);i++){ const d={k,n:null,t:toInt(src.inicio)||Date.now()}, id="_"+rid(); ops.push(b=>b.set(pRef(code,id),d)); } });
+    return ops;
+  }
+  // Guardados de este celular que aún no están en el evento
+  function histOps(code){
+    const items=hist.filter(it=>it.subido!==code);
+    return {items,ops:items.map(it=>{ const d=cleanSaved(it), id="local-"+it.id+"-"+rid(); return b=>b.set(gRef(code,id),d); })};
+  }
+  function savedList(){
+    if(!evt) return hist;
+    return sharedHist.concat(hist.filter(x=>x.subido!==evt.code)).sort((a,b)=>(b.fecha||0)-(a.fecha||0));
+  }
+  if(evt) cur=sharedCur();
 
   // Registrar asistente: cada toque pide nombre y apellido
   const addSheet=$("addSheet"); let addK=null;
@@ -470,14 +619,26 @@ body.kb .nav{display:none}
     if(key.split(" ").length<2){ setErr("Escribe nombre y apellido."); buzz([30,50,30]); return; }
     const dup=findDup(key);
     if(dup){ setErr(dupMsg(dup)); $("addOk").disabled=true; buzz([30,50,30]); return; }
-    const k=addK; if(!cur.inicio) cur.inicio=Date.now();
-    cur[k]++; cur.taps.push({k,n,t:Date.now()});
+    const k=addK;
+    if(evt){
+      if(!fb) return;
+      fb.F.setDoc(pRef(evt.code,key),{k,n,t:Date.now()}).catch(()=>toast(n+" no se guardó: ya estaba registrado en otro celular o no hay permiso",true));
+      evt.mine.push(key); store.set(KEY_EVT,evt);
+    }else{ if(!cur.inicio) cur.inicio=Date.now(); cur[k]++; cur.taps.push({k,n,t:Date.now()}); }
     people[key]={n,k}; store.set(KEY_PEOPLE,people);
     autosave(); closeSheet(addSheet); buzz(25); toast("+1 "+TIPO[k]+" · "+n);
     const b=document.querySelector('.pad[data-k="'+k+'"]'); b.classList.remove("hit"); void b.offsetWidth; b.classList.add("hit");
   });
 
   $("undo").addEventListener("click",()=>{
+    if(evt){
+      // Solo deshace lo que registró este celular
+      if(!fb) return;
+      let p=null; while(evt.mine.length&&!p){ const id=evt.mine.pop(); p=sharedPeople.find(x=>x.id===id)||null; }
+      store.set(KEY_EVT,evt); render();
+      if(p){ fb.F.deleteDoc(pRef(evt.code,p.id)).catch(failed); buzz([15,40,15]); toast("Quitado: "+p.n,true); }
+      return;
+    }
     const x=cur.taps.pop(); const k=x&&(typeof x==="object"?x.k:x);
     if(k&&cur[k]>0) cur[k]--; autosave(); buzz([15,40,15]);
     if(x&&typeof x==="object") toast("Quitado: "+x.n,true);
@@ -485,20 +646,29 @@ body.kb .nav{display:none}
   $("reset").addEventListener("click",async()=>{
     const n=total(), nn=named(cur.taps).length;
     const ok=await ask({title:"Poner en cero",word:true,ok:"Borrar conteo",
-      msg:"Se borrará el conteo actual: "+n+(n===1?" persona":" personas")+(nn?" y sus "+nn+" nombres":"")+". No queda en Guardados y no se puede recuperar."});
-    if(ok){ cur=blank(); autosave(); toast("Contador en cero",true); }
+      msg:"Se borrará el conteo actual: "+n+(n===1?" persona":" personas")+(nn?" y sus "+nn+" nombres":"")+(evt?", en todos los celulares del evento":"")+". No queda en Guardados y no se puede recuperar."});
+    if(!ok) return;
+    if(evt){
+      if(!fb) return;
+      const code=evt.code; evt.mine=[]; store.set(KEY_EVT,evt);
+      inBatches(sharedPeople.map(p=>b=>b.delete(pRef(code,p.id)))).catch(failed);
+    }else{ cur=blank(); autosave(); }
+    toast("Contador en cero",true);
   });
 
   // Guardados
   function renderList(){
     const box=$("list"); box.textContent="";
-    $("export").style.display=hist.length?"block":"none";
-    if(!hist.length){
+    const groups=evt?[["EVENTO "+evt.code,sharedHist],["SOLO EN ESTE CELULAR",hist.filter(x=>x.subido!==evt.code)]]:[["CONTEOS",hist]];
+    const any=groups.some(g=>g[1].length);
+    $("export").style.display=any?"block":"none";
+    if(!any){
       box.innerHTML='<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Aún no has cerrado conteos. Toca el botón azul del centro para guardar uno.</div>';
       return;
     }
-    const sec=document.createElement("div"); sec.className="section"; sec.textContent="CONTEOS"; box.appendChild(sec);
-    hist.forEach(it=>{
+    groups.forEach(([title,items])=>{ if(!items.length) return;
+    const sec=document.createElement("div"); sec.className="section"; sec.textContent=title; box.appendChild(sec);
+    items.forEach(it=>{
       const r=document.createElement("div"); r.className="row";
       const ic=document.createElement("div"); ic.className="ic"; ic.textContent=it.total;
       const info=document.createElement("div"); info.className="info";
@@ -516,15 +686,20 @@ body.kb .nav{display:none}
       d.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
       d.addEventListener("click",async()=>{
         const ok=await ask({title:"Borrar conteo guardado",word:true,ok:"Borrar",
-          msg:"Se borrará \""+(it.nombre||"Sin nombre")+"\" ("+fmt(it.fecha)+") con "+(it.total===1?"1 asistente":"sus "+it.total+" asistentes")+". No se puede recuperar."});
-        if(ok){ hist=hist.filter(x=>x.id!==it.id); store.set(KEY_HIST,hist); renderList(); toast("Conteo borrado",true); }
+          msg:"Se borrará \""+(it.nombre||"Sin nombre")+"\" ("+fmt(it.fecha)+") con "+(it.total===1?"1 asistente":"sus "+it.total+" asistentes")+(it.shared?", en todos los celulares del evento":"")+". No se puede recuperar."});
+        if(!ok) return;
+        if(it.shared){ if(fb&&evt) fb.F.deleteDoc(gRef(evt.code,it.id)).catch(failed); }
+        else{ hist=hist.filter(x=>x.id!==it.id); store.set(KEY_HIST,hist); renderList(); }
+        toast("Conteo borrado",true);
       });
       r.append(ic,info,d); box.appendChild(r);
+    });
     });
   }
 
   // Respaldo en CSV
   $("export").addEventListener("click",async()=>{
+    const hist=savedList();
     const ks=CATS.concat(hist.some(x=>hv(x,"j"))?["j"]:[]), CSVN={h:"Hombres",m:"Mujeres",ah:"Adolescentes hombres",am:"Adolescentes mujeres",j:"Jovenes"};
     const rows=[["Evento","Fecha"].concat(ks.map(k=>CSVN[k]),["Total"])]
       .concat(hist.map(x=>[(x.nombre||"Sin nombre").replace(/[;\n]/g," "),new Date(x.fecha).toLocaleString("es-CO")].concat(ks.map(k=>hv(x,k)),[x.total])));
@@ -549,7 +724,8 @@ body.kb .nav{display:none}
     show("people"); renderAll();
   }
   async function removePerson(p){
-    if(!await ask({title:"Quitar persona",ok:"Quitar",msg:"Se quitará a "+p.n+" ("+TIPO[p.k]+") y el contador bajará en 1."})) return;
+    if(!await ask({title:"Quitar persona",ok:"Quitar",msg:"Se quitará a "+p.n+" ("+TIPO[p.k]+") y el contador bajará en 1"+(evt?" en todos los celulares":"")+"."})) return;
+    if(evt){ if(fb&&p.id) fb.F.deleteDoc(pRef(evt.code,p.id)).catch(failed); toast("Quitado: "+p.n,true); return; }
     const i=cur.taps.indexOf(p); if(i<0) return;
     cur.taps.splice(i,1); if(cur[p.k]>0) cur[p.k]--;
     autosave(); renderAll(); toast("Quitado: "+p.n,true);
@@ -689,7 +865,7 @@ body.kb .nav{display:none}
       body.appendChild(composition(cur,ks));
       const a=arrivals(); if(!a.parentNode) body.appendChild(a);
     } else {
-      const last=hist.slice(0,12).reverse();
+      const hist=savedList(), last=hist.slice(0,12).reverse();
       const c=card("Conteos guardados", last.length?(last.length<hist.length?"Últimos "+last.length+" de "+hist.length:last.length+" conteos"):null);
       body.appendChild(c);
       if(!last.length){ c.appendChild(el("div","cEmpty","Aún no has cerrado conteos.")); return; }
@@ -798,6 +974,7 @@ body.kb .nav{display:none}
     const s=$("sum"); s.textContent="";
     keysOf([cur]).map(k=>[NOMBRES[k],cur[k],COLOR[k]]).forEach(([l,v,c])=>{
       const d=document.createElement("div"); d.style.background=c; const b=document.createElement("b"); b.textContent=v; d.append(b,document.createTextNode(l)); s.appendChild(d); });
+    $("sh-p").textContent=evt?"Queda en Guardados de todos los celulares del evento y el contador vuelve a cero para todos.":"Queda en Guardados y el contador vuelve a cero.";
     $("name").value=""; sheet.classList.add("open");
   });
   $("cancel").addEventListener("click",()=>closeSheet(sheet));
@@ -805,6 +982,16 @@ body.kb .nav{display:none}
   $("name").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("confirm").click(); } });
   $("pSearch").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); e.target.blur(); } });
   $("confirm").addEventListener("click",()=>{
+    if(evt){
+      if(!fb) return;
+      // Se borran solo las personas incluidas: si otro celular registra a alguien al mismo tiempo, no se pierde.
+      const code=evt.code, it=cleanSaved({nombre:$("name").value.trim(),...Object.fromEntries(ALL.map(k=>[FIELD[k],cur[k]])),total:total(),fecha:Date.now(),inicio:cur.inicio,asistentes:named(cur.taps)});
+      const gid=String(Date.now())+"-"+rid();
+      inBatches([b=>b.set(gRef(code,gid),it)].concat(sharedPeople.map(p=>b=>b.delete(pRef(code,p.id))))).catch(failed);
+      evt.mine=[]; store.set(KEY_EVT,evt);
+      closeSheet(sheet); toast("Conteo guardado"); buzz(60);
+      return;
+    }
     hist.unshift({id:String(Date.now()),nombre:$("name").value.trim().slice(0,60),...Object.fromEntries(ALL.map(k=>[FIELD[k],cur[k]])),total:total(),fecha:Date.now(),inicio:cur.inicio||null,asistentes:named(cur.taps)});
     hist=hist.slice(0,500); store.set(KEY_HIST,hist);
     cur=blank(); autosave(); closeSheet(sheet);
@@ -817,6 +1004,7 @@ body.kb .nav{display:none}
   // Botón atrás de Android
   if(App) App.addListener("backButton",()=>{
     if(askSheet.classList.contains("open")) askEnd(false);
+    else if(syncSheet.classList.contains("open")) closeSync();
     else if(addSheet.classList.contains("open")) closeSheet(addSheet);
     else if(sheet.classList.contains("open")) closeSheet(sheet);
     else if(view==="people") show(pFrom);
@@ -831,8 +1019,84 @@ body.kb .nav{display:none}
     if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
     try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
   }
+  // Contar con otros celulares
+  const syncSheet=$("syncSheet");
+  function openSync(){
+    $("syncErr").textContent=""; $("code").value="";
+    $("syncOff").style.display=evt?"none":"block"; $("syncOn").style.display=evt?"block":"none";
+    if(evt) $("bigcode").textContent=evt.code;
+    syncSheet.classList.add("open");
+  }
+  const closeSync=()=>closeSheet(syncSheet);
+  $("sync").addEventListener("click",openSync);
+  $("syncCancel").addEventListener("click",closeSync);
+  $("syncClose").addEventListener("click",closeSync);
+  syncSheet.addEventListener("click",e=>{ if(e.target===syncSheet) closeSync(); });
+  $("code").addEventListener("input",e=>{ e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,""); });
+  $("code").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("join").click(); } });
+
+  async function busy(btn,fn){
+    const bs=[$("create"),$("join")], old=btn.textContent;
+    bs.forEach(x=>x.disabled=true); btn.textContent="Conectando…"; $("syncErr").textContent="";
+    try{ await fn(); }
+    catch(e){ $("syncErr").textContent=navigator.onLine?"No se pudo conectar. Intenta de nuevo.":"Necesitas internet para crear o unirte a un evento."; }
+    finally{ bs.forEach(x=>x.disabled=false); btn.textContent=old; }
+  }
+  // Sube los Guardados (y, si se pide, el conteo sin cerrar) antes de entrar. Si algo falla no se toca nada local.
+  async function upload(code,withCur,skip){
+    const h=histOps(code), ops=h.ops.concat(withCur?peopleOps(code,solo,skip):[]);
+    if(ops.length) await inBatches(ops);
+    if(h.items.length){ h.items.forEach(it=>it.subido=code); store.set(KEY_HIST,hist); }
+    if(withCur){ solo=blank(); store.set(KEY_CUR,solo); }
+    return h.items.length;
+  }
+  function enter(code,sent){
+    evt={code,mine:[]}; store.set(KEY_EVT,evt);
+    listen(); refresh(); openSync(); buzz(60);
+    if(sent) toast(sent===1?"Se subió 1 conteo guardado":"Se subieron "+sent+" conteos guardados");
+  }
+  $("create").addEventListener("click",()=>busy($("create"),async()=>{
+    const {F,db}=await initFb();
+    let code;
+    for(let i=0;i<5&&!code;i++){
+      const c=Array.from(crypto.getRandomValues(new Uint32Array(6)),n=>CODE_CHARS[n%CODE_CHARS.length]).join("");
+      if(!(await F.getDocFromServer(F.doc(db,"eventos",c))).exists()) code=c;
+    }
+    if(!code) throw new Error("sin código");
+    await F.setDoc(F.doc(db,"eventos",code),{creado:Date.now()});
+    // El conteo que ya había en este celular pasa a ser el conteo del evento
+    enter(code,await upload(code,sumK(solo)>0,new Set()));
+  }));
+  $("join").addEventListener("click",()=>{
+    const code=$("code").value.trim();
+    if(code.length!==6){ $("syncErr").textContent="El código tiene 6 letras o números."; return; }
+    busy($("join"),async()=>{
+      const {F,db}=await initFb();
+      if(!(await F.getDocFromServer(F.doc(db,"eventos",code))).exists()){ $("syncErr").textContent="No existe un evento con el código "+code+"."; return; }
+      const n=sumK(solo);
+      const withCur=n>0&&await ask({title:"Conteo sin cerrar",safe:true,ok:"Sumar al evento",
+        msg:"Este celular tiene un conteo sin cerrar con "+(n===1?"1 persona":n+" personas")+". ¿Sumarlo al evento "+code+"? Las personas que ya estén en el evento no se repiten. Si no, queda guardado en este celular."});
+      const skip=withCur?new Set((await F.getDocsFromServer(F.collection(db,"eventos",code,"personas"))).docs.map(d=>d.id)):new Set();
+      enter(code,await upload(code,withCur,skip));
+    });
+  });
+  $("shareCode").addEventListener("click",async()=>{
+    const text="Únete a mi conteo en la app Contador MIRA: toca el botón Compartir y escribe el código "+evt.code;
+    try{
+      if(Share) await Share.share({title:"Código del evento",text,dialogTitle:"Compartir código"});
+      else if(navigator.share) await navigator.share({title:"Código del evento",text});
+      else if(navigator.clipboard){ await navigator.clipboard.writeText(evt.code); toast("Código copiado"); }
+    }catch(e){}
+  });
+  $("leave").addEventListener("click",async()=>{
+    const code=evt.code;
+    if(!await ask({title:"Salir del evento",safe:true,ok:"Salir",msg:"El conteo del evento "+code+" sigue en los otros celulares y puedes volver con el mismo código. Este celular vuelve a su conteo propio."})) return;
+    stopListening(); evt=null; store.set(KEY_EVT,null);
+    closeSync(); refresh(); setStatus("Guardado automático en el celular");
+  });
+
   render();
-  $("statusTxt").textContent="Guardado automático en el celular";
+  if(evt) listen(); else setStatus("Guardado automático en el celular");
 })();
 </script>
 

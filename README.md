@@ -7,7 +7,7 @@ App para contar asistentes (hombres, mujeres, jóvenes) con guardado local en el
 - Guardado en el almacenamiento interno de la app (no se pierde al borrar datos del navegador).
 - Respaldo en CSV desde **Guardados → Enviar respaldo** (WhatsApp, Drive, Excel).
 - Funciona sin conexión.
-- **Conteo compartido entre celulares** en tiempo real (Firebase): un celular crea un evento, los demás se unen con el código de 6 letras y todos suman al mismo conteo. Sin internet sigue contando y sincroniza al volver la señal.
+- **Conteo compartido entre celulares** en tiempo real (Firebase): un celular crea un evento, los demás se unen con el código de 6 letras y todos suman al mismo conteo. Al crear o unirse, el conteo abierto y los Guardados del celular se suben al evento. Sin internet sigue contando y sincroniza al volver la señal.
 
 ## Estructura
 ```
@@ -33,7 +33,8 @@ cd android && ./gradlew assembleDebug
 
 ## Sincronización (Firebase)
 - Proyecto: `contador-app-54f65` (plan gratuito Spark). Usa Firestore e inicio de sesión anónimo.
-- Datos: `eventos/{código}` guarda `h`, `m`, `j` (se suman con incrementos atómicos para no perder toques simultáneos) y `eventos/{código}/guardados` los conteos cerrados.
+- Datos: `eventos/{código}/personas/{nombre normalizado}` es una persona contada (`k` categoría, `n` nombre, `t` hora). Como el id es el nombre y las reglas no dejan sobrescribir, nadie se cuenta dos veces desde celulares distintos. Los toques sin nombre de versiones viejas usan un id aleatorio y `n: null`. `eventos/{código}/guardados` guarda los conteos cerrados.
+- El conteo propio del celular (`contador:actual`, `contador:historial`) nunca se borra al entrar a un evento: solo se vacía el conteo abierto después de subirlo, y los Guardados subidos quedan marcados con `subido`.
 - Si cambias `firestore.rules`, publícalas en Firebase → Firestore Database → Reglas (o `firebase deploy --only firestore:rules`).
 - Para actualizar el SDK: cambia la versión de `firebase` en `package.json`, `npm install` y `npm run build:firebase`.
 

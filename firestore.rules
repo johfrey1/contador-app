@@ -6,28 +6,36 @@ service cloud.firestore {
     function count(v) { return v is int && v >= 0 && v < 1000000; }
     function when(v) { return v == null || v is int; }
 
-    // Un evento compartido. Solo se lee con el código exacto (no se pueden listar).
+    // Un evento compartido. Solo se abre con el código exacto (no se pueden listar).
     match /eventos/{code} {
       allow get: if signedIn();
       allow create: if signedIn() && code.matches('^[A-HJ-NP-Z2-9]{6}$')
-        && request.resource.data.keys().hasOnly(['h', 'm', 'j', 'inicio', 'creado', 'actualizado'])
-        && count(request.resource.data.h) && count(request.resource.data.m) && count(request.resource.data.j)
-        && when(request.resource.data.inicio) && request.resource.data.creado is int && request.resource.data.actualizado is int;
-      allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['h', 'm', 'j', 'inicio', 'actualizado'])
-        && count(request.resource.data.h) && count(request.resource.data.m) && count(request.resource.data.j)
-        && when(request.resource.data.inicio) && request.resource.data.actualizado is int;
-      allow list, delete: if false;
+        && request.resource.data.keys().hasOnly(['creado']) && request.resource.data.creado is int;
+      allow list, update, delete: if false;
+
+      // Una persona contada. El id es su nombre normalizado y no se puede sobrescribir:
+      // así la misma persona no se cuenta dos veces desde celulares distintos.
+      match /personas/{id} {
+        allow read, delete: if signedIn();
+        allow create: if signedIn() && id.size() <= 100
+          && request.resource.data.keys().hasOnly(['k', 'n', 't'])
+          && request.resource.data.k in ['h', 'm', 'ah', 'am', 'j']
+          && (request.resource.data.n == null || (request.resource.data.n is string && request.resource.data.n.size() <= 80))
+          && request.resource.data.t is int;
+        allow update: if false;
+      }
 
       // Conteos cerrados del evento (pestaña Guardados).
       match /guardados/{id} {
         allow read, delete: if signedIn();
         allow create: if signedIn()
-          && request.resource.data.keys().hasOnly(['nombre', 'hombres', 'mujeres', 'jovenes', 'total', 'fecha', 'inicio'])
+          && request.resource.data.keys().hasOnly(['nombre', 'hombres', 'mujeres', 'adolHombres', 'adolMujeres', 'jovenes', 'total', 'fecha', 'inicio', 'asistentes'])
           && request.resource.data.nombre is string && request.resource.data.nombre.size() <= 60
           && count(request.resource.data.hombres) && count(request.resource.data.mujeres)
+          && count(request.resource.data.adolHombres) && count(request.resource.data.adolMujeres)
           && count(request.resource.data.jovenes) && count(request.resource.data.total)
-          && request.resource.data.fecha is int && when(request.resource.data.inicio);
+          && request.resource.data.fecha is int && when(request.resource.data.inicio)
+          && request.resource.data.asistentes is list && request.resource.data.asistentes.size() <= 5000;
         allow update: if false;
       }
     }

@@ -4,5 +4,5 @@ export { initializeApp } from "firebase/app";
 export { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 export {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, collection, query, orderBy, limit, getDoc, getDocFromServer, setDoc, deleteDoc, onSnapshot, writeBatch, increment
+  doc, collection, query, orderBy, limit, getDocFromServer, getDocsFromServer, setDoc, deleteDoc, onSnapshot, writeBatch
 } from "firebase/firestore";
