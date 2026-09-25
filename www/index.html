@@ -205,8 +205,8 @@ body.kb .nav{display:none}
 .syncPill.linked{border-color:var(--ok);color:var(--ok)}
 .btn.full{width:100%;flex:none}
 .or{text-align:center;color:var(--muted);margin:16px 0 12px;font-size:.9rem}
-.field.code{text-align:center;letter-spacing:.3em;font-weight:800;text-transform:uppercase;font-size:1.5rem}
-.bigcode{font-size:2.6rem;font-weight:900;letter-spacing:.2em;text-align:center;padding:18px 8px;border-radius:20px;background:var(--bg);
+.field.code{text-align:center;letter-spacing:.2em;font-weight:800;text-transform:uppercase;font-size:1.5rem}
+.bigcode{font-size:2.3rem;font-weight:900;letter-spacing:.12em;text-align:center;padding:18px 8px;border-radius:20px;background:var(--bg);
   border:1.5px dashed var(--line);margin-bottom:16px;-webkit-user-select:all;user-select:all}
 .panel .gap{margin-top:10px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(112px + env(safe-area-inset-bottom,0px));
@@ -346,23 +346,26 @@ body.kb .nav{display:none}
   <div class="panel">
     <h2 id="sy-t">Contar con otros celulares</h2>
     <div id="syncOff">
-      <p>Crea un evento y comparte el código. Todos los celulares con ese código suman al mismo conteo en tiempo real. Tu conteo actual y tus Guardados se suben al evento.</p>
-      <button class="btn primary full" id="create">Crear evento compartido</button>
-      <div class="or">o únete con un código</div>
-      <input class="field code" id="code" placeholder="CÓDIGO" maxlength="6" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      <p>Comparte el conteo que tienes abierto: los demás celulares suman al mismo conteo en tiempo real. Tus Guardados también se suben.</p>
+      <button class="btn primary full" id="create">Compartir este conteo</button>
+      <div class="or">o únete con el código que te enviaron</div>
+      <input class="field code" id="code" placeholder="XXXX-XXXX" maxlength="9" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
       <div class="acts">
         <button class="btn" id="syncCancel">Cancelar</button>
         <button class="btn primary" id="join">Unirse</button>
       </div>
     </div>
     <div id="syncOn">
-      <p>Comparte este código con los demás celulares:</p>
-      <div class="bigcode" id="bigcode"></div>
+      <p id="invTxt"></p>
+      <div class="bigcode" id="bigcode">—</div>
       <div class="acts">
-        <button class="btn" id="leave">Salir del evento</button>
+        <button class="btn" id="newCode">Nuevo código</button>
         <button class="btn primary" id="shareCode">Compartir código</button>
       </div>
-      <button class="btn full gap" id="syncClose">Cerrar</button>
+      <div class="acts gap">
+        <button class="btn" id="leave">Salir del evento</button>
+        <button class="btn" id="syncClose">Cerrar</button>
+      </div>
     </div>
     <div class="err" id="syncErr" role="alert" style="margin:12px 0 0"></div>
   </div>
@@ -401,7 +404,7 @@ body.kb .nav{display:none}
       localStorage.setItem(k,s); }catch(e){} }
   };
 
-  const KEY_CUR="contador:actual", KEY_HIST="contador:historial", KEY_THEME="contador:tema", KEY_PEOPLE="contador:personas", KEY_EVT="contador:evento";
+  const KEY_CUR="contador:actual", KEY_HIST="contador:historial", KEY_THEME="contador:tema", KEY_PEOPLE="contador:personas", KEY_EVT="contador:evento", KEY_DISC="contador:descartados";
   // Categorías actuales. "j" (Jóvenes) es de versiones anteriores: solo se muestra si hay datos viejos.
   const CATS=["h","m","ah","am"], ALL=CATS.concat("j");
   const FIELD={h:"hombres",m:"mujeres",ah:"adolHombres",am:"adolMujeres",j:"jovenes"};
@@ -428,8 +431,8 @@ body.kb .nav{display:none}
   ALL.forEach(k=>{ cur[k]=+cur[k]||0; });
   let hist = await store.get(KEY_HIST,[]); if(!Array.isArray(hist)) hist=[];
   let people = await store.get(KEY_PEOPLE,{}); if(!people||typeof people!=="object") people={};
-  // Evento compartido al que está unido este celular: {code, mine:[ids de personas que registró este celular]} o null
-  let evt = await store.get(KEY_EVT,null); if(!evt||typeof evt.code!=="string") evt=null;
+  // Evento compartido al que está unido este celular: {id, mine:[personas que registró este celular], inv:{code,vence}} o null
+  let evt = await store.get(KEY_EVT,null); if(!evt||typeof evt.id!=="string") evt=null;
   if(evt&&!Array.isArray(evt.mine)) evt.mine=[];
   // Conteo propio del celular (lo único que se guarda en KEY_CUR). Con evento, "cur" muestra el conteo del evento.
   let solo=cur;
@@ -444,7 +447,7 @@ body.kb .nav{display:none}
     $("tot").textContent=total();
     $("started").textContent=(cur.inicio?"Desde "+fmt(cur.inicio):"Conteo nuevo")+(cur.j?" · Jóvenes (versión anterior): "+cur.j:"");
     $("undo").disabled=evt?!evt.mine.length:cur.taps.length===0; $("reset").disabled=total()===0; $("fab").disabled=total()===0;
-    $("sync").classList.toggle("linked",!!evt); $("syncLbl").textContent=evt?evt.code:"Compartir";
+    $("sync").classList.toggle("linked",!!evt); $("syncLbl").textContent=evt?"Compartido":"Compartir";
     renderPeople();
   }
   function personRow(p,onRemove){
@@ -472,7 +475,7 @@ body.kb .nav{display:none}
   }
   function autosave(){
     if(evt){ render(); return; } // el conteo del evento vive en Firebase
-    cur.updatedAt=Date.now(); solo=cur; store.set(KEY_CUR,cur); render();
+    cur.updatedAt=Date.now(); solo=cur; store.set(KEY_CUR,cur); render(); scheduleBackup();
     $("statusTxt").textContent="Guardado en el celular · "+new Date().toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"});
   }
 
@@ -499,7 +502,8 @@ body.kb .nav{display:none}
     clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("show"),1800);
   }
 
-  // ---------- Sincronización entre celulares (Firebase) ----------
+  // ---------- Firebase: respaldo automático y conteo compartido ----------
+  const APP_VERSION="3";
   const FB_CONFIG={
     apiKey:"AIzaSyDOIuDttfzVRFAORfcF8kUyWsgWyB5ns6M",
     authDomain:"contador-app-54f65.firebaseapp.com",
@@ -508,7 +512,12 @@ body.kb .nav{display:none}
     messagingSenderId:"862536289329",
     appId:"1:862536289329:web:0d2eea4231f694fc845910"
   };
+  // Solo para pruebas en la computadora: http://localhost:xxxx/?emulador usa los emuladores de Firebase
+  const EMU=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&/[?&]emulador\b/.test(location.search);
   const CODE_CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0/O ni 1/I para no confundir
+  const randCode=n=>Array.from(crypto.getRandomValues(new Uint32Array(n)),x=>CODE_CHARS[x%CODE_CHARS.length]).join("");
+  const randId=()=>randCode(20);
+  const H24=23*3600*1000; // las invitaciones vencen en ~1 día (las reglas aceptan hasta 25 h por relojes desfasados)
   let fbReady=null, fb=null;
   function initFb(){
     if(!fbReady) fbReady=(async()=>{
@@ -516,23 +525,62 @@ body.kb .nav{display:none}
       const app=F.initializeApp(FB_CONFIG);
       const auth=F.initializeAuth(app,{persistence:[F.indexedDBLocalPersistence,F.browserLocalPersistence]});
       const db=F.initializeFirestore(app,{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})});
+      if(EMU){ F.connectAuthEmulator(auth,"http://127.0.0.1:9099",{disableWarnings:true}); F.connectFirestoreEmulator(db,"127.0.0.1",8080); }
       const user=await new Promise(res=>{ const off=F.onAuthStateChanged(auth,u=>{ off(); res(u); }); });
-      if(!user) await F.signInAnonymously(auth);
-      fb={F,db}; return fb;
+      const u=user||(await F.signInAnonymously(auth)).user;
+      fb={F,db,uid:u.uid}; return fb;
     })().catch(e=>{ fbReady=null; throw e; });
     return fbReady;
   }
-  // Cada persona del evento es un documento cuyo id es su nombre normalizado: así nadie se cuenta dos veces,
-  // aunque la registren en celulares distintos (las reglas no dejan sobrescribir un documento).
-  const pRef=(code,id)=>fb.F.doc(fb.db,"eventos",code,"personas",id);
-  const gRef=(code,id)=>fb.F.doc(fb.db,"eventos",code,"guardados",id);
-  const rid=()=>Math.random().toString(36).slice(2,10);
-  let sharedPeople=[], sharedHist=[], unsubs=[];
+  const toInt=v=>Math.max(0,Math.round(+v||0));
+  // Conteo guardado con el formato que aceptan las reglas. Siempre da lo mismo para el mismo conteo,
+  // así reenviarlo no choca con la copia que ya está en Firebase.
+  function cleanSaved(it){
+    const o={nombre:String(it.nombre||"").slice(0,60),total:toInt(it.total),fecha:toInt(it.fecha)||toInt(it.id),inicio:it.inicio?toInt(it.inicio):null,
+      asistentes:(Array.isArray(it.asistentes)?it.asistentes:[]).filter(p=>p&&p.n).map(p=>({k:String(p.k),n:String(p.n),t:toInt(p.t)}))};
+    ALL.forEach(k=>o[FIELD[k]]=toInt(it[FIELD[k]]));
+    return o;
+  }
+  const snapshotOf=(c,nombre)=>({nombre,...Object.fromEntries(ALL.map(k=>[FIELD[k],c[k]||0])),total:sumK(c),fecha:Date.now(),inicio:c.inicio||null,asistentes:named(c.taps)});
+
+  // ----- Respaldo automático: todo lo del celular se copia a Firebase (solo este celular lo puede leer) -----
+  let disc = await store.get(KEY_DISC,[]); if(!Array.isArray(disc)) disc=[];
+  let bkTimer=null, bkRunning=false, bkAt=0;
+  const scheduleBackup=ms=>{ clearTimeout(bkTimer); bkTimer=setTimeout(backup,ms==null?2500:ms); };
+  function soloStatus(){
+    if(evt) return;
+    if(bkAt) setStatus("Guardado en el celular y en la nube · "+hora(bkAt));
+    else if(!navigator.onLine) setStatus("Guardado en el celular · se respalda en la nube al tener internet","offline");
+  }
+  async function backup(){
+    if(bkRunning){ scheduleBackup(4000); return; }
+    bkRunning=true;
+    try{
+      const {F,db,uid}=await initFb(), R=(...p)=>F.doc(db,"respaldos",uid,...p), jobs=[];
+      jobs.push(F.setDoc(R(),{actualizado:Date.now(),plataforma:native?"android":"web",version:APP_VERSION},{merge:true}));
+      jobs.push(F.setDoc(R("estado","actual"),{conteo:JSON.parse(JSON.stringify(solo)),actualizado:Date.now()}));
+      const send=(list,tipo)=>list.filter(it=>!it.respaldo).map(it=>F.setDoc(R(tipo,String(it.id||it.fecha)),cleanSaved(it)).then(()=>{ it.respaldo=true; }));
+      const a=send(hist,"guardados"), b=send(disc,"descartados");
+      const res=await Promise.allSettled(jobs.concat(a,b));
+      if(a.length) store.set(KEY_HIST,hist);
+      if(b.length) store.set(KEY_DISC,disc);
+      if(res.every(r=>r.status==="fulfilled")){ bkAt=Date.now(); soloStatus(); }
+    }catch(e){ soloStatus(); }
+    finally{ bkRunning=false; }
+  }
+  window.addEventListener("online",()=>scheduleBackup(300));
+  window.addEventListener("offline",soloStatus);
+
+  // ----- Conteo compartido -----
+  const ev=(eid,...p)=>fb.F.doc(fb.db,"eventos",eid,...p);
+  const pRef=(eid,cid,id)=>ev(eid,"conteos",cid,"personas",id);
+  const personData=(k,n,t)=>({k,n,t,por:fb.uid,quitado:null,quitadoPor:null});
+  let actual=null, sharedPeople=[], sharedHist=[], unsubs=[], pUnsub=null;
   function setStatus(txt,cls){ $("status").className="status"+(cls?" "+cls:""); $("statusTxt").textContent=txt; }
   function syncStatus(meta){
     if(meta.hasPendingWrites) setStatus(navigator.onLine?"Enviando…":"Sin conexión · se envía al volver","offline");
     else if(meta.fromCache) setStatus("Sin conexión","offline");
-    else setStatus("Sincronizado · "+hora(Date.now()));
+    else setStatus("Compartido · sincronizado "+hora(Date.now()));
   }
   // El conteo del evento con la misma forma que el conteo local, para que pantallas y gráficas funcionen igual
   function sharedCur(){
@@ -545,54 +593,70 @@ body.kb .nav{display:none}
     cur=evt?sharedCur():solo; render();
     if(view==="people"&&!pSrc) renderAll(); else if(view==="chart") renderChart(); else if(view==="saved") renderList();
   }
-  function stopListening(){ unsubs.forEach(f=>f()); unsubs=[]; sharedPeople=[]; sharedHist=[]; }
+  function stopListening(){ unsubs.forEach(f=>f()); unsubs=[]; if(pUnsub) pUnsub(); pUnsub=null; actual=null; sharedPeople=[]; sharedHist=[]; }
   async function listen(){
     stopListening(); setStatus("Conectando…","offline");
-    try{ await initFb(); }catch(e){ setStatus("No se pudo conectar al evento","error"); return; }
-    const F=fb.F, code=evt.code, mine=()=>evt&&evt.code===code;
-    unsubs.push(F.onSnapshot(F.query(F.collection(fb.db,"eventos",code,"personas"),F.orderBy("t")),{includeMetadataChanges:true},snap=>{
+    try{ await initFb(); }catch(e){ setStatus("Sin conexión · el evento se abre al tener internet","error"); return; }
+    const F=fb.F, eid=evt.id, mine=()=>evt&&evt.id===eid;
+    unsubs.push(F.onSnapshot(ev(eid),snap=>{
+      if(!mine()||!snap.exists()) return;
+      const cid=snap.data().actual; if(cid===actual) return;
+      actual=cid; if(pUnsub) pUnsub(); sharedPeople=[]; evt.mine=[]; store.set(KEY_EVT,evt); refresh();
+      pUnsub=F.onSnapshot(F.query(F.collection(fb.db,"eventos",eid,"conteos",cid,"personas"),F.orderBy("t")),{includeMetadataChanges:true},s=>{
+        if(!mine()||actual!==cid) return;
+        sharedPeople=s.docs.map(x=>Object.assign({id:x.id},x.data())).filter(p=>p.quitado==null);
+        refresh(); syncStatus(s.metadata);
+      },()=>setStatus("No se pudo leer el conteo compartido","error"));
+    },()=>setStatus("Este celular ya no tiene acceso al evento","error")));
+    unsubs.push(F.onSnapshot(F.query(F.collection(fb.db,"eventos",eid,"guardados"),F.orderBy("fecha","desc"),F.limit(300)),snap=>{
       if(!mine()) return;
-      sharedPeople=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
-      refresh(); syncStatus(snap.metadata);
-    },()=>setStatus("Sin permiso para leer el evento","error")));
-    unsubs.push(F.onSnapshot(F.query(F.collection(fb.db,"eventos",code,"guardados"),F.orderBy("fecha","desc"),F.limit(300)),snap=>{
-      if(!mine()) return;
-      sharedHist=snap.docs.map(d=>Object.assign({},d.data(),{id:d.id,shared:true}));
+      sharedHist=snap.docs.map(x=>Object.assign({},x.data(),{id:x.id,shared:true})).filter(x=>x.archivado==null);
       if(view==="saved") renderList(); else if(view==="chart") renderChart();
     },()=>{}));
   }
   const failed=()=>toast("No se guardó un cambio en el evento",true);
-  // Firestore acepta hasta 500 cambios por tanda
-  async function inBatches(ops){
-    for(let i=0;i<ops.length;i+=400){ const b=fb.F.writeBatch(fb.db); ops.slice(i,i+400).forEach(op=>op(b)); await b.commit(); }
+  const ready=()=>{ if(fb&&actual) return true; toast("Conectando con el evento…",true); return false; };
+  // Marca a una persona como quitada (no se borra: queda quién y cuándo)
+  const quitar=p=>fb.F.updateDoc(pRef(evt.id,actual,p.id),{quitado:Date.now(),quitadoPor:fb.uid}).catch(failed);
+  // Empieza otro conteo en el evento (al cerrar o poner en cero). El anterior queda intacto en Firebase.
+  function nextConteo(motivo,extra){
+    const F=fb.F, eid=evt.id, prev=actual, cid=randId(), b=F.writeBatch(fb.db);
+    if(extra) extra(b,prev);
+    b.set(ev(eid,"conteos",cid),{creado:Date.now(),por:fb.uid,anterior:prev,motivo});
+    b.update(ev(eid),{actual:cid,actualizado:Date.now()});
+    evt.mine=[]; store.set(KEY_EVT,evt);
+    return b.commit().catch(failed);
   }
-  const toInt=v=>Math.max(0,Math.round(+v||0));
-  // Conteo guardado con el formato que aceptan las reglas (rellena campos que no existían en versiones viejas)
-  function cleanSaved(it){
-    const o={nombre:String(it.nombre||"").slice(0,60),total:toInt(it.total),fecha:toInt(it.fecha)||Date.now(),inicio:it.inicio?toInt(it.inicio):null,
-      asistentes:(Array.isArray(it.asistentes)?it.asistentes:[]).filter(p=>p&&p.n).map(p=>({k:String(p.k),n:String(p.n),t:toInt(p.t)}))};
-    ALL.forEach(k=>o[FIELD[k]]=toInt(it[FIELD[k]]));
-    return o;
+  // Tandas de 100 escrituras (Firestore acepta hasta 500)
+  async function inBatches(ops){
+    for(let i=0;i<ops.length;i+=100){ const b=fb.F.writeBatch(fb.db); ops.slice(i,i+100).forEach(op=>op(b)); await b.commit(); }
   }
   // Personas de un conteo local como documentos del evento. Los toques sin nombre (versiones viejas) van sin nombre.
-  function peopleOps(code,src,skip){
+  function peopleOps(eid,cid,src,skip){
     const ops=[], byK={};
+    const local=new Set();
     named(src.taps).forEach(p=>{
-      const id=norm(p.n); byK[p.k]=(byK[p.k]||0)+1;
-      if(!id||skip.has(id)) return; skip.add(id);
-      const d={k:p.k,n:p.n,t:toInt(p.t)||Date.now()}; ops.push(b=>b.set(pRef(code,id),d));
+      let id=norm(p.n); byK[p.k]=(byK[p.k]||0)+1;
+      if(!id||skip.has(id)) return; // ya está en el evento
+      // Dos nombres locales que se escriben igual: se conservan los dos (no se pierde a nadie)
+      for(let i=2;local.has(id);i++) id=norm(p.n)+" ~"+i;
+      local.add(id);
+      const d=personData(p.k,p.n,toInt(p.t)||Date.now()); ops.push(b=>b.set(pRef(eid,cid,id),d));
     });
-    ALL.forEach(k=>{ for(let i=byK[k]||0;i<(src[k]||0);i++){ const d={k,n:null,t:toInt(src.inicio)||Date.now()}, id="_"+rid(); ops.push(b=>b.set(pRef(code,id),d)); } });
+    ALL.forEach(k=>{ for(let i=byK[k]||0;i<(src[k]||0);i++){ const d=personData(k,null,toInt(src.inicio)||Date.now()), id="_"+randCode(12); ops.push(b=>b.set(pRef(eid,cid,id),d)); } });
     return ops;
   }
-  // Guardados de este celular que aún no están en el evento
-  function histOps(code){
-    const items=hist.filter(it=>it.subido!==code);
-    return {items,ops:items.map(it=>{ const d=cleanSaved(it), id="local-"+it.id+"-"+rid(); return b=>b.set(gRef(code,id),d); })};
+  // Sube los Guardados del celular al evento (id fijo por conteo: reenviar no duplica)
+  async function uploadHist(eid){
+    const F=fb.F, items=hist.filter(it=>it.subido!==eid);
+    const res=await Promise.allSettled(items.map(it=>F.setDoc(ev(eid,"guardados","L-"+fb.uid+"-"+String(it.id||it.fecha)),
+      Object.assign(cleanSaved(it),{conteo:null,por:fb.uid,origen:"celular",archivado:null,archivadoPor:null})).then(()=>{ it.subido=eid; })));
+    if(items.length) store.set(KEY_HIST,hist);
+    return res.filter(r=>r.status==="fulfilled").length;
   }
   function savedList(){
     if(!evt) return hist;
-    return sharedHist.concat(hist.filter(x=>x.subido!==evt.code)).sort((a,b)=>(b.fecha||0)-(a.fecha||0));
+    return sharedHist.concat(hist.filter(x=>x.subido!==evt.id)).sort((a,b)=>(b.fecha||0)-(a.fecha||0));
   }
   if(evt) cur=sharedCur();
 
@@ -621,8 +685,8 @@ body.kb .nav{display:none}
     if(dup){ setErr(dupMsg(dup)); $("addOk").disabled=true; buzz([30,50,30]); return; }
     const k=addK;
     if(evt){
-      if(!fb) return;
-      fb.F.setDoc(pRef(evt.code,key),{k,n,t:Date.now()}).catch(()=>toast(n+" no se guardó: ya estaba registrado en otro celular o no hay permiso",true));
+      if(!ready()) return;
+      fb.F.setDoc(pRef(evt.id,actual,key),personData(k,n,Date.now())).catch(()=>toast(n+" no se guardó: ya lo registraron en otro celular",true));
       evt.mine.push(key); store.set(KEY_EVT,evt);
     }else{ if(!cur.inicio) cur.inicio=Date.now(); cur[k]++; cur.taps.push({k,n,t:Date.now()}); }
     people[key]={n,k}; store.set(KEY_PEOPLE,people);
@@ -633,10 +697,10 @@ body.kb .nav{display:none}
   $("undo").addEventListener("click",()=>{
     if(evt){
       // Solo deshace lo que registró este celular
-      if(!fb) return;
+      if(!ready()) return;
       let p=null; while(evt.mine.length&&!p){ const id=evt.mine.pop(); p=sharedPeople.find(x=>x.id===id)||null; }
       store.set(KEY_EVT,evt); render();
-      if(p){ fb.F.deleteDoc(pRef(evt.code,p.id)).catch(failed); buzz([15,40,15]); toast("Quitado: "+p.n,true); }
+      if(p){ quitar(p); buzz([15,40,15]); toast("Quitado: "+(p.n||SIGLA[p.k]),true); }
       return;
     }
     const x=cur.taps.pop(); const k=x&&(typeof x==="object"?x.k:x);
@@ -645,21 +709,21 @@ body.kb .nav{display:none}
   });
   $("reset").addEventListener("click",async()=>{
     const n=total(), nn=named(cur.taps).length;
-    const ok=await ask({title:"Poner en cero",word:true,ok:"Borrar conteo",
-      msg:"Se borrará el conteo actual: "+n+(n===1?" persona":" personas")+(nn?" y sus "+nn+" nombres":"")+(evt?", en todos los celulares del evento":"")+". No queda en Guardados y no se puede recuperar."});
+    const ok=await ask({title:"Poner en cero",word:true,ok:"Poner en cero",
+      msg:"El conteo actual ("+(n===1?"1 persona":n+" personas")+(nn?(nn===1?" con su nombre":" con sus "+nn+" nombres"):"")+") vuelve a cero"+(evt?" en todos los celulares del evento":"")+". No queda en Guardados, pero sí una copia de respaldo en Firebase."});
     if(!ok) return;
-    if(evt){
-      if(!fb) return;
-      const code=evt.code; evt.mine=[]; store.set(KEY_EVT,evt);
-      inBatches(sharedPeople.map(p=>b=>b.delete(pRef(code,p.id)))).catch(failed);
-    }else{ cur=blank(); autosave(); }
+    if(evt){ if(!ready()) return; nextConteo("cero"); }
+    else{
+      disc.unshift(Object.assign({id:"cero-"+Date.now(),respaldo:false},snapshotOf(cur,"Puesto en cero")));
+      store.set(KEY_DISC,disc); cur=blank(); autosave();
+    }
     toast("Contador en cero",true);
   });
 
   // Guardados
   function renderList(){
     const box=$("list"); box.textContent="";
-    const groups=evt?[["EVENTO "+evt.code,sharedHist],["SOLO EN ESTE CELULAR",hist.filter(x=>x.subido!==evt.code)]]:[["CONTEOS",hist]];
+    const groups=evt?[["CONTEO COMPARTIDO",sharedHist],["SOLO EN ESTE CELULAR",hist.filter(x=>x.subido!==evt.id)]]:[["CONTEOS",hist]];
     const any=groups.some(g=>g[1].length);
     $("export").style.display=any?"block":"none";
     if(!any){
@@ -685,12 +749,14 @@ body.kb .nav{display:none}
       const d=document.createElement("button"); d.className="del"; d.setAttribute("aria-label","Borrar conteo");
       d.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
       d.addEventListener("click",async()=>{
-        const ok=await ask({title:"Borrar conteo guardado",word:true,ok:"Borrar",
-          msg:"Se borrará \""+(it.nombre||"Sin nombre")+"\" ("+fmt(it.fecha)+") con "+(it.total===1?"1 asistente":"sus "+it.total+" asistentes")+(it.shared?", en todos los celulares del evento":"")+". No se puede recuperar."});
+        // Nada se pierde: solo se quita de la lista cuando ya hay copia en Firebase
+        if(!it.shared&&!it.respaldo){ scheduleBackup(0); toast("Aún no está respaldado en la nube. Conéctate a internet e intenta de nuevo.",true); return; }
+        const ok=await ask({title:"Quitar de Guardados",word:true,ok:"Quitar",
+          msg:"Se quitará \""+(it.nombre||"Sin nombre")+"\" ("+fmt(it.fecha)+") de la lista"+(it.shared?" en todos los celulares del evento":" de este celular")+". Queda una copia de respaldo en Firebase."});
         if(!ok) return;
-        if(it.shared){ if(fb&&evt) fb.F.deleteDoc(gRef(evt.code,it.id)).catch(failed); }
+        if(it.shared){ if(fb&&evt) fb.F.updateDoc(ev(evt.id,"guardados",it.id),{archivado:Date.now(),archivadoPor:fb.uid}).catch(failed); }
         else{ hist=hist.filter(x=>x.id!==it.id); store.set(KEY_HIST,hist); renderList(); }
-        toast("Conteo borrado",true);
+        toast("Quitado de Guardados",true);
       });
       r.append(ic,info,d); box.appendChild(r);
     });
@@ -725,7 +791,7 @@ body.kb .nav{display:none}
   }
   async function removePerson(p){
     if(!await ask({title:"Quitar persona",ok:"Quitar",msg:"Se quitará a "+p.n+" ("+TIPO[p.k]+") y el contador bajará en 1"+(evt?" en todos los celulares":"")+"."})) return;
-    if(evt){ if(fb&&p.id) fb.F.deleteDoc(pRef(evt.code,p.id)).catch(failed); toast("Quitado: "+p.n,true); return; }
+    if(evt){ if(ready()&&p.id){ quitar(p); toast("Quitado: "+p.n,true); } return; }
     const i=cur.taps.indexOf(p); if(i<0) return;
     cur.taps.splice(i,1); if(cur[p.k]>0) cur[p.k]--;
     autosave(); renderAll(); toast("Quitado: "+p.n,true);
@@ -983,18 +1049,17 @@ body.kb .nav{display:none}
   $("pSearch").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); e.target.blur(); } });
   $("confirm").addEventListener("click",()=>{
     if(evt){
-      if(!fb) return;
-      // Se borran solo las personas incluidas: si otro celular registra a alguien al mismo tiempo, no se pierde.
-      const code=evt.code, it=cleanSaved({nombre:$("name").value.trim(),...Object.fromEntries(ALL.map(k=>[FIELD[k],cur[k]])),total:total(),fecha:Date.now(),inicio:cur.inicio,asistentes:named(cur.taps)});
-      const gid=String(Date.now())+"-"+rid();
-      inBatches([b=>b.set(gRef(code,gid),it)].concat(sharedPeople.map(p=>b=>b.delete(pRef(code,p.id))))).catch(failed);
-      evt.mine=[]; store.set(KEY_EVT,evt);
+      if(!ready()) return;
+      // Se guarda y empieza otro conteo; las personas del conteo cerrado quedan intactas en Firebase
+      const it=cleanSaved(snapshotOf(cur,$("name").value.trim())), eid=evt.id;
+      nextConteo("cierre",(b,prev)=>b.set(ev(eid,"guardados",randId()),Object.assign(it,{conteo:prev,por:fb.uid,origen:"cierre",archivado:null,archivadoPor:null})));
       closeSheet(sheet); toast("Conteo guardado"); buzz(60);
       return;
     }
-    hist.unshift({id:String(Date.now()),nombre:$("name").value.trim().slice(0,60),...Object.fromEntries(ALL.map(k=>[FIELD[k],cur[k]])),total:total(),fecha:Date.now(),inicio:cur.inicio||null,asistentes:named(cur.taps)});
-    hist=hist.slice(0,500); store.set(KEY_HIST,hist);
-    cur=blank(); autosave(); closeSheet(sheet);
+    // Sin límite de cantidad: antes se descartaban los más viejos pasados 500
+    hist.unshift(Object.assign({id:String(Date.now())},snapshotOf(cur,$("name").value.trim().slice(0,60))));
+    store.set(KEY_HIST,hist);
+    cur=blank(); autosave(); closeSheet(sheet); scheduleBackup(0);
     toast("Conteo guardado"); buzz(60);
   });
 
@@ -1019,84 +1084,125 @@ body.kb .nav{display:none}
     if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
     try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
   }
-  // Contar con otros celulares
+  // Compartir el conteo con otros celulares
   const syncSheet=$("syncSheet");
-  function openSync(){
+  const fmtCode=c=>c?c.slice(0,4)+"-"+c.slice(4):"—";
+  const invValid=()=>evt&&evt.inv&&evt.inv.vence>Date.now()+60000;
+  function showInv(){
+    $("bigcode").textContent=invValid()?fmtCode(evt.inv.code):"—";
+    $("invTxt").textContent=invValid()?"Este código sirve para UN solo celular. Vence el "+fmt(evt.inv.vence):"Toca \"Nuevo código\" para invitar a otro celular.";
+  }
+  async function openSync(){
     $("syncErr").textContent=""; $("code").value="";
     $("syncOff").style.display=evt?"none":"block"; $("syncOn").style.display=evt?"block":"none";
-    if(evt) $("bigcode").textContent=evt.code;
     syncSheet.classList.add("open");
+    if(!evt) return;
+    showInv();
+    // Si el código ya lo usó otro celular, se ofrece uno nuevo
+    if(invValid()&&fb) try{
+      const s=await fb.F.getDocFromServer(fb.F.doc(fb.db,"invitaciones",evt.inv.code));
+      if(s.exists()&&s.data().usadoPor){ evt.inv=null; store.set(KEY_EVT,evt); showInv(); $("invTxt").textContent="El último código ya lo usó otro celular. Toca \"Nuevo código\" para invitar a otro."; }
+    }catch(e){}
   }
   const closeSync=()=>closeSheet(syncSheet);
   $("sync").addEventListener("click",openSync);
   $("syncCancel").addEventListener("click",closeSync);
   $("syncClose").addEventListener("click",closeSync);
   syncSheet.addEventListener("click",e=>{ if(e.target===syncSheet) closeSync(); });
-  $("code").addEventListener("input",e=>{ e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,""); });
+  $("code").addEventListener("input",e=>{ const v=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,8); e.target.value=v.length>4?v.slice(0,4)+"-"+v.slice(4):v; });
   $("code").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("join").click(); } });
 
+  const say=msg=>Object.assign(new Error(msg),{say:msg});
   async function busy(btn,fn){
-    const bs=[$("create"),$("join")], old=btn.textContent;
+    const bs=[$("create"),$("join"),$("newCode"),$("shareCode")], old=btn.textContent;
     bs.forEach(x=>x.disabled=true); btn.textContent="Conectando…"; $("syncErr").textContent="";
     try{ await fn(); }
-    catch(e){ $("syncErr").textContent=navigator.onLine?"No se pudo conectar. Intenta de nuevo.":"Necesitas internet para crear o unirte a un evento."; }
+    catch(e){ $("syncErr").textContent=e&&e.say?e.say:navigator.onLine?"No se pudo conectar. Intenta de nuevo.":"Necesitas internet para esto."; }
     finally{ bs.forEach(x=>x.disabled=false); btn.textContent=old; }
   }
-  // Sube los Guardados (y, si se pide, el conteo sin cerrar) antes de entrar. Si algo falla no se toca nada local.
-  async function upload(code,withCur,skip){
-    const h=histOps(code), ops=h.ops.concat(withCur?peopleOps(code,solo,skip):[]);
-    if(ops.length) await inBatches(ops);
-    if(h.items.length){ h.items.forEach(it=>it.subido=code); store.set(KEY_HIST,hist); }
-    if(withCur){ solo=blank(); store.set(KEY_CUR,solo); }
-    return h.items.length;
+  async function newInvite(){
+    const {F,db,uid}=await initFb();
+    for(let i=0;i<5;i++){
+      const code=randCode(8), vence=Date.now()+H24;
+      try{
+        await F.setDoc(F.doc(db,"invitaciones",code),{evento:evt.id,creadoPor:uid,creado:Date.now(),vence:F.Timestamp.fromMillis(vence),usadoPor:null,usadoEn:null});
+        evt.inv={code,vence}; store.set(KEY_EVT,evt); return code;
+      }catch(e){ if(!navigator.onLine) throw e; } // código repetido: se prueba otro
+    }
+    throw say("No se pudo crear el código. Intenta de nuevo.");
   }
-  function enter(code,sent){
-    evt={code,mine:[]}; store.set(KEY_EVT,evt);
-    listen(); refresh(); openSync(); buzz(60);
+  // Pasa el conteo abierto de este celular al evento. Solo se vacía aquí después de subirlo.
+  async function moveSolo(eid,cid,skip){
+    await inBatches(peopleOps(eid,cid,solo,skip));
+    disc.unshift(Object.assign({id:"mov-"+Date.now(),respaldo:false},snapshotOf(solo,"Pasado al conteo compartido")));
+    store.set(KEY_DISC,disc);
+    solo=blank(); store.set(KEY_CUR,solo); scheduleBackup(0);
+  }
+  function enter(eid,sent){
+    evt={id:eid,mine:[],inv:evt&&evt.id===eid?evt.inv:null}; store.set(KEY_EVT,evt);
+    listen(); refresh(); buzz(60);
     if(sent) toast(sent===1?"Se subió 1 conteo guardado":"Se subieron "+sent+" conteos guardados");
   }
   $("create").addEventListener("click",()=>busy($("create"),async()=>{
-    const {F,db}=await initFb();
-    let code;
-    for(let i=0;i<5&&!code;i++){
-      const c=Array.from(crypto.getRandomValues(new Uint32Array(6)),n=>CODE_CHARS[n%CODE_CHARS.length]).join("");
-      if(!(await F.getDocFromServer(F.doc(db,"eventos",c))).exists()) code=c;
-    }
-    if(!code) throw new Error("sin código");
-    await F.setDoc(F.doc(db,"eventos",code),{creado:Date.now()});
-    // El conteo que ya había en este celular pasa a ser el conteo del evento
-    enter(code,await upload(code,sumK(solo)>0,new Set()));
+    const {F,db,uid}=await initFb(), eid=randId(), cid=randId(), b=F.writeBatch(db);
+    b.set(ev(eid),{dueno:uid,actual:cid,creado:Date.now(),actualizado:Date.now()});
+    b.set(ev(eid,"conteos",cid),{creado:Date.now(),por:uid,anterior:null,motivo:"inicio"});
+    b.set(ev(eid,"miembros",uid),{desde:Date.now(),invitacion:null});
+    await b.commit();
+    if(sumK(solo)>0) await moveSolo(eid,cid,new Set());
+    const sent=await uploadHist(eid);
+    enter(eid,sent);
+    await newInvite(); openSync();
   }));
   $("join").addEventListener("click",()=>{
-    const code=$("code").value.trim();
-    if(code.length!==6){ $("syncErr").textContent="El código tiene 6 letras o números."; return; }
+    const code=$("code").value.toUpperCase().replace(/[^A-Z0-9]/g,"");
+    if(code.length!==8){ $("syncErr").textContent="El código tiene 8 letras o números."; return; }
     busy($("join"),async()=>{
-      const {F,db}=await initFb();
-      if(!(await F.getDocFromServer(F.doc(db,"eventos",code))).exists()){ $("syncErr").textContent="No existe un evento con el código "+code+"."; return; }
-      const n=sumK(solo);
-      const withCur=n>0&&await ask({title:"Conteo sin cerrar",safe:true,ok:"Sumar al evento",
-        msg:"Este celular tiene un conteo sin cerrar con "+(n===1?"1 persona":n+" personas")+". ¿Sumarlo al evento "+code+"? Las personas que ya estén en el evento no se repiten. Si no, queda guardado en este celular."});
-      const skip=withCur?new Set((await F.getDocsFromServer(F.collection(db,"eventos",code,"personas"))).docs.map(d=>d.id)):new Set();
-      enter(code,await upload(code,withCur,skip));
+      const {F,db,uid}=await initFb();
+      const inv=await F.getDocFromServer(F.doc(db,"invitaciones",code));
+      if(!inv.exists()) throw say("Ese código no existe. Revisa que esté bien escrito.");
+      const v=inv.data(), eid=v.evento;
+      // ¿Ya es miembro? (volver a un evento del que salió): no gasta el código
+      let member=true; try{ await F.getDocFromServer(ev(eid)); }catch(e){ member=false; }
+      if(!member){
+        if(v.usadoPor) throw say("Ese código ya se usó. Cada código sirve para un solo celular: pide uno nuevo.");
+        if(v.vence.toMillis()<=Date.now()) throw say("Ese código ya venció. Pide uno nuevo.");
+        const b=F.writeBatch(db);
+        b.update(F.doc(db,"invitaciones",code),{usadoPor:uid,usadoEn:Date.now()});
+        b.set(ev(eid,"miembros",uid),{desde:Date.now(),invitacion:code});
+        await b.commit();
+      }
+      const cid=(await F.getDocFromServer(ev(eid))).data().actual, n=sumK(solo);
+      if(n>0&&await ask({title:"Conteo sin cerrar",safe:true,ok:"Sumar al evento",
+        msg:"Este celular tiene un conteo sin cerrar con "+(n===1?"1 persona":n+" personas")+". ¿Sumarlo al conteo compartido? Las personas que ya estén no se repiten. Si no, queda guardado en este celular."})){
+        const have=(await F.getDocsFromServer(F.collection(db,"eventos",eid,"conteos",cid,"personas"))).docs.filter(x=>x.data().quitado==null).map(x=>x.id);
+        await moveSolo(eid,cid,new Set(have));
+      }
+      enter(eid,await uploadHist(eid));
+      openSync();
     });
   });
-  $("shareCode").addEventListener("click",async()=>{
-    const text="Únete a mi conteo en la app Contador MIRA: toca el botón Compartir y escribe el código "+evt.code;
+  $("newCode").addEventListener("click",()=>busy($("newCode"),async()=>{ await newInvite(); showInv(); }));
+  $("shareCode").addEventListener("click",()=>busy($("shareCode"),async()=>{
+    if(!invValid()) await newInvite();
+    showInv();
+    const text="Únete a mi conteo en Contador MIRA: toca Compartir → Unirse y escribe el código "+fmtCode(evt.inv.code)+" (sirve para un solo celular).";
     try{
-      if(Share) await Share.share({title:"Código del evento",text,dialogTitle:"Compartir código"});
-      else if(navigator.share) await navigator.share({title:"Código del evento",text});
-      else if(navigator.clipboard){ await navigator.clipboard.writeText(evt.code); toast("Código copiado"); }
+      if(Share) await Share.share({title:"Código para contar juntos",text,dialogTitle:"Compartir código"});
+      else if(navigator.share) await navigator.share({title:"Código para contar juntos",text});
+      else if(navigator.clipboard){ await navigator.clipboard.writeText(text); toast("Código copiado"); }
     }catch(e){}
-  });
+  }));
   $("leave").addEventListener("click",async()=>{
-    const code=evt.code;
-    if(!await ask({title:"Salir del evento",safe:true,ok:"Salir",msg:"El conteo del evento "+code+" sigue en los otros celulares y puedes volver con el mismo código. Este celular vuelve a su conteo propio."})) return;
+    if(!await ask({title:"Salir del evento",safe:true,ok:"Salir",msg:"El conteo compartido sigue en los otros celulares y queda guardado en Firebase. Para volver necesitas un código nuevo. Este celular vuelve a su conteo propio."})) return;
     stopListening(); evt=null; store.set(KEY_EVT,null);
-    closeSync(); refresh(); setStatus("Guardado automático en el celular");
+    closeSync(); refresh(); setStatus("Guardado automático en el celular"); soloStatus();
   });
+  if(App) App.addListener("resume",()=>scheduleBackup(500));
 
   render();
   if(evt) listen(); else setStatus("Guardado automático en el celular");
+  scheduleBackup(1500); // al instalar o actualizar, sube lo que ya había en el celular
 })();
 </script>
 

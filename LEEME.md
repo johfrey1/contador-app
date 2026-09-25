@@ -18,17 +18,22 @@
 - Android incluye esos datos en la copia de seguridad de Google del teléfono.
 - En **Guardados → Enviar respaldo** mandas un CSV a WhatsApp o Drive (se abre en Excel).
 
+## Respaldo automático en la nube
+- Al instalar o actualizar la app, todo lo que ya había en el celular (conteo abierto y Guardados, también los de versiones viejas) se sube solo a Firebase. No hay que hacer nada.
+- Después, cada cambio se respalda solo. Sin internet se guarda en el celular y se sube cuando vuelve la señal. Arriba dice "Guardado en el celular y en la nube" cuando ya está respaldado.
+- Nada se borra de la nube: "Poner en cero" guarda una copia, y "Quitar de Guardados" solo se permite cuando ese conteo ya está respaldado.
+
 ## Contar con varios celulares a la vez
-1. En el celular que ya tiene datos toca **Compartir** (junto a "Guardado automático") → **Crear evento compartido**. Aparece un código de 6 letras, por ejemplo `Y3AED4`.
-   - El conteo que tenías abierto y todos tus **Guardados** se suben a Firebase y quedan en el evento.
-2. Toca **Compartir código** y mándalo por WhatsApp a los demás.
-3. En cada otro celular: **Compartir** → escribe el código → **Unirse**. Si ese celular tenía un conteo abierto, pregunta si quieres sumarlo al evento (las personas repetidas no se cuentan dos veces). Sus Guardados también se suben.
-4. Listo: cada persona que registres en cualquier celular aparece en todos al instante. El botón muestra el código en verde mientras estás en un evento.
-- Una persona solo se puede registrar una vez por evento, aunque lo intenten desde dos celulares.
-- Para crear o unirse hace falta internet. Después, si se va la señal, sigue contando y lo envía solo cuando vuelve.
-- **Cerrar y guardar** guarda el conteo en **Guardados** de todos los celulares y lo pone en cero para todos.
-- **Deshacer** quita solo la última persona registrada en ese celular.
-- **Salir del evento** vuelve al conteo propio de ese celular; el evento sigue en los demás y puedes volver con el mismo código. Los Guardados que tenías siguen en el celular.
+1. En el celular que tiene el conteo abierto toca **Compartir** (junto a "Guardado…") → **Compartir este conteo**. Ese mismo conteo pasa a ser compartido y sus Guardados también se suben.
+2. Aparece un código de 8 letras, por ejemplo `WGJN-KP8W`. Toca **Compartir código** y mándalo por WhatsApp.
+   - **Cada código sirve para un solo celular** y vence en un día. Para otro celular toca **Nuevo código**.
+3. En el otro celular: **Compartir** → escribe el código → **Unirse**. Si ese celular tenía un conteo abierto, pregunta si quieres sumarlo (las personas repetidas no se cuentan dos veces).
+4. Cada persona que registres en cualquier celular aparece en todos al instante.
+- Una persona solo se cuenta una vez por conteo, aunque la registren desde dos celulares.
+- **Deshacer** quita la última persona registrada en ese celular. Quitar a alguien no la borra: queda marcado quién la quitó y cuándo.
+- **Cerrar y guardar** lo guarda en **Guardados** de todos y empieza un conteo nuevo para todos. Las personas del conteo cerrado quedan guardadas.
+- **Salir del evento** vuelve al conteo propio del celular. Para volver a entrar hace falta un código nuevo.
+- Solo los celulares que entraron con un código pueden ver o cambiar el conteo compartido.
 
 ## Actualizar
 Cambia `www/index.html`, sube el cambio y descarga el nuevo APK. Instálalo encima: los datos se conservan porque la firma (`keystore/debug.keystore`, guardada en el secret `DEBUG_KEYSTORE_BASE64`) es siempre la misma. **No borres esa carpeta ni el secret.**

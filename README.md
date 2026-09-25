@@ -32,9 +32,25 @@ cd android && ./gradlew assembleDebug
 ```
 
 ## Sincronización (Firebase)
-- Proyecto: `contador-app-54f65` (plan gratuito Spark). Usa Firestore e inicio de sesión anónimo.
-- Datos: `eventos/{código}/personas/{nombre normalizado}` es una persona contada (`k` categoría, `n` nombre, `t` hora). Como el id es el nombre y las reglas no dejan sobrescribir, nadie se cuenta dos veces desde celulares distintos. Los toques sin nombre de versiones viejas usan un id aleatorio y `n: null`. `eventos/{código}/guardados` guarda los conteos cerrados.
-- El conteo propio del celular (`contador:actual`, `contador:historial`) nunca se borra al entrar a un evento: solo se vacía el conteo abierto después de subirlo, y los Guardados subidos quedan marcados con `subido`.
+Proyecto `contador-app-54f65` (plan gratuito Spark), con Firestore e inicio de sesión anónimo. Cada celular tiene un usuario anónimo que se conserva al actualizar la app.
+
+**Nada se borra**: las reglas no permiten `delete` en ninguna colección. Quitar, poner en cero y archivar solo marcan.
+
+| Ruta | Qué es | Quién |
+|---|---|---|
+| `respaldos/{uid}/guardados/{id}` | Copia de cada Guardado del celular (no se modifica) | Solo ese celular |
+| `respaldos/{uid}/descartados/{id}` | Conteos puestos en cero o pasados a un evento | Solo ese celular |
+| `respaldos/{uid}/estado/actual` | Conteo abierto del celular | Solo ese celular |
+| `invitaciones/{código}` | Código de 8 caracteres, un solo uso, vence en ~1 día | Se lee con el código exacto |
+| `eventos/{id}` | Evento compartido (`actual` = conteo en curso) | Solo miembros |
+| `eventos/{id}/miembros/{uid}` | Celulares que entraron con un código | Solo miembros |
+| `eventos/{id}/conteos/{cid}/personas/{nombre}` | Persona contada; el id es el nombre normalizado, así no se repite | Solo miembros |
+| `eventos/{id}/guardados/{id}` | Conteos cerrados (se archivan, no se borran) | Solo miembros |
+
+- Al cerrar o poner en cero se crea otro conteo y el evento apunta a él; el anterior queda intacto.
+- El celular respalda automáticamente al abrir la app, tras cada cambio y al volver la conexión. Un Guardado local solo se puede quitar de la lista si ya está respaldado.
+- Pruebas de las reglas (40 casos, necesita Java): `npm run test:rules`.
+- Probar la app contra los emuladores: `firebase emulators:start --only auth,firestore` y abrir `http://localhost:PUERTO/?emulador`.
 - Si cambias `firestore.rules`, publícalas en Firebase → Firestore Database → Reglas (o `firebase deploy --only firestore:rules`).
 - Para actualizar el SDK: cambia la versión de `firebase` en `package.json`, `npm install` y `npm run build:firebase`.
 

@@ -1,42 +1,159 @@
 rules_version = '2';
 // Reglas de seguridad de Firestore. Se publican en Firebase → Firestore Database → Reglas.
+// Principios:
+//  - Nada se borra nunca (delete siempre falso). "Quitar", "poner en cero" y "borrar" solo marcan.
+//  - Cada celular solo ve su propio respaldo.
+//  - Un evento solo lo ven sus miembros. Se entra con un código de invitación de un solo uso que vence.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function d() { return request.resource.data; }
+    function changed() { return d().diff(resource.data).affectedKeys(); }
     function count(v) { return v is int && v >= 0 && v < 1000000; }
     function when(v) { return v == null || v is int; }
+    function cat(v) { return v in ['h', 'm', 'ah', 'am', 'j']; }
+    function name(v) { return v == null || (v is string && v.size() <= 80); }
+    function evento(eid) { return /databases/$(database)/documents/eventos/$(eid); }
+    function miembro(eid) { return /databases/$(database)/documents/eventos/$(eid)/miembros/$(uid()); }
+    function isMember(eid) { return signedIn() && exists(miembro(eid)); }
+    // Para escrituras en tanda que crean la membresía en la misma tanda
+    function isMemberAfter(eid) { return signedIn() && existsAfter(miembro(eid)); }
+    function conteoActual(eid) { return getAfter(evento(eid)).data.actual; }
 
-    // Un evento compartido. Solo se abre con el código exacto (no se pueden listar).
-    match /eventos/{code} {
+    // Campos de un conteo guardado (igual en el respaldo y en el evento)
+    function savedFields(x) {
+      return x.nombre is string && x.nombre.size() <= 60
+        && count(x.hombres) && count(x.mujeres) && count(x.adolHombres) && count(x.adolMujeres)
+        && count(x.jovenes) && count(x.total)
+        && x.fecha is int && when(x.inicio)
+        && x.asistentes is list && x.asistentes.size() <= 5000;
+    }
+    function savedKeys() {
+      return ['nombre', 'hombres', 'mujeres', 'adolHombres', 'adolMujeres', 'jovenes', 'total', 'fecha', 'inicio', 'asistentes'];
+    }
+
+    // ---------- Respaldo automático de cada celular ----------
+    match /respaldos/{owner} {
+      function mine() { return signedIn() && uid() == owner; }
+      allow read: if mine();
+      allow create, update: if mine()
+        && d().keys().hasOnly(['actualizado', 'plataforma', 'version'])
+        && d().actualizado is int;
+      allow delete: if false;
+
+      // Conteos cerrados y conteos puestos en cero: no se cambian (solo se acepta reenviar lo mismo)
+      match /{tipo}/{id} {
+        allow read: if mine() && tipo in ['guardados', 'descartados'];
+        allow create: if mine() && tipo in ['guardados', 'descartados']
+          && d().keys().hasOnly(savedKeys()) && savedFields(d());
+        allow update: if mine() && tipo in ['guardados', 'descartados'] && d() == resource.data;
+        allow delete: if false;
+      }
+      // Conteo abierto del celular: se reemplaza con cada cambio
+      match /estado/{id} {
+        allow read: if mine();
+        allow create, update: if mine() && id == 'actual'
+          && d().keys().hasOnly(['conteo', 'actualizado'])
+          && d().conteo is map && d().actualizado is int;
+        allow delete: if false;
+      }
+    }
+
+    // ---------- Invitaciones de un solo uso ----------
+    match /invitaciones/{code} {
       allow get: if signedIn();
-      allow create: if signedIn() && code.matches('^[A-HJ-NP-Z2-9]{6}$')
-        && request.resource.data.keys().hasOnly(['creado']) && request.resource.data.creado is int;
-      allow list, update, delete: if false;
+      allow create: if signedIn() && code.matches('^[A-HJ-NP-Z2-9]{8}$')
+        && d().keys().hasOnly(['evento', 'creadoPor', 'creado', 'vence', 'usadoPor', 'usadoEn'])
+        && d().evento is string && isMember(d().evento)
+        && d().creadoPor == uid() && d().creado is int
+        && d().vence is timestamp && d().vence > request.time && d().vence <= request.time + duration.value(25, 'h')
+        && d().usadoPor == null && d().usadoEn == null;
+      // Usarla: una sola vez, antes de que venza, y en la misma tanda en que se crea la membresía
+      allow update: if signedIn() && resource.data.usadoPor == null && request.time < resource.data.vence
+        && changed().hasOnly(['usadoPor', 'usadoEn'])
+        && d().usadoPor == uid() && d().usadoEn is int
+        && existsAfter(/databases/$(database)/documents/eventos/$(resource.data.evento)/miembros/$(uid()));
+      allow list, delete: if false;
+    }
 
-      // Una persona contada. El id es su nombre normalizado y no se puede sobrescribir:
-      // así la misma persona no se cuenta dos veces desde celulares distintos.
-      match /personas/{id} {
-        allow read, delete: if signedIn();
-        allow create: if signedIn() && id.size() <= 100
-          && request.resource.data.keys().hasOnly(['k', 'n', 't'])
-          && request.resource.data.k in ['h', 'm', 'ah', 'am', 'j']
-          && (request.resource.data.n == null || (request.resource.data.n is string && request.resource.data.n.size() <= 80))
-          && request.resource.data.t is int;
-        allow update: if false;
+    // ---------- Eventos compartidos ----------
+    match /eventos/{eid} {
+      allow get: if isMember(eid);
+      allow create: if signedIn()
+        && d().keys().hasOnly(['dueno', 'actual', 'creado', 'actualizado'])
+        && d().dueno == uid() && d().actual is string && d().creado is int && d().actualizado is int
+        && existsAfter(miembro(eid))
+        && existsAfter(/databases/$(database)/documents/eventos/$(eid)/conteos/$(d().actual));
+      // Cambiar de conteo (al cerrar o poner en cero): el nuevo conteo debe continuar al actual
+      allow update: if isMember(eid)
+        && changed().hasOnly(['actual', 'actualizado'])
+        && d().actual is string && d().actual != resource.data.actual && d().actualizado is int
+        && getAfter(/databases/$(database)/documents/eventos/$(eid)/conteos/$(d().actual)).data.anterior == resource.data.actual;
+      allow list, delete: if false;
+
+      match /miembros/{m} {
+        function inv() { return /databases/$(database)/documents/invitaciones/$(d().invitacion); }
+        allow read: if isMember(eid);
+        allow create: if signedIn() && m == uid()
+          && d().keys().hasOnly(['desde', 'invitacion']) && d().desde is int
+          && (
+            // El dueño al crear el evento
+            (d().invitacion == null && getAfter(evento(eid)).data.dueno == uid()
+              && !exists(evento(eid)))
+            // Cualquiera con una invitación sin usar de este evento, que usa en la misma tanda
+            || (d().invitacion is string
+              && get(inv()).data.evento == eid
+              && get(inv()).data.usadoPor == null
+              && getAfter(inv()).data.usadoPor == uid())
+          );
+        allow update, delete: if false;
       }
 
-      // Conteos cerrados del evento (pestaña Guardados).
-      match /guardados/{id} {
-        allow read, delete: if signedIn();
-        allow create: if signedIn()
-          && request.resource.data.keys().hasOnly(['nombre', 'hombres', 'mujeres', 'adolHombres', 'adolMujeres', 'jovenes', 'total', 'fecha', 'inicio', 'asistentes'])
-          && request.resource.data.nombre is string && request.resource.data.nombre.size() <= 60
-          && count(request.resource.data.hombres) && count(request.resource.data.mujeres)
-          && count(request.resource.data.adolHombres) && count(request.resource.data.adolMujeres)
-          && count(request.resource.data.jovenes) && count(request.resource.data.total)
-          && request.resource.data.fecha is int && when(request.resource.data.inicio)
-          && request.resource.data.asistentes is list && request.resource.data.asistentes.size() <= 5000;
-        allow update: if false;
+      match /conteos/{cid} {
+        allow read: if isMember(eid);
+        allow create: if isMemberAfter(eid)
+          && d().keys().hasOnly(['creado', 'por', 'anterior', 'motivo'])
+          && d().creado is int && d().por == uid()
+          && ((d().motivo == 'inicio' && d().anterior == null)
+            || (d().motivo in ['cierre', 'cero'] && d().anterior is string));
+        allow update, delete: if false;
+
+        // Una persona contada. El id es su nombre normalizado: no se puede contar dos veces.
+        match /personas/{pid} {
+          function fields() {
+            return d().keys().hasOnly(['k', 'n', 't', 'por', 'quitado', 'quitadoPor'])
+              && cat(d().k) && name(d().n) && d().t is int && d().por == uid();
+          }
+          allow read: if isMember(eid);
+          allow create: if isMemberAfter(eid) && pid.size() <= 100 && conteoActual(eid) == cid
+            && fields() && d().quitado == null && d().quitadoPor == null;
+          allow update: if isMember(eid) && conteoActual(eid) == cid && (
+            // Quitar: queda marcado quién y cuándo
+            (resource.data.quitado == null && changed().hasOnly(['quitado', 'quitadoPor'])
+              && d().quitado is int && d().quitadoPor == uid())
+            // Volver a registrar a alguien que se había quitado
+            || (resource.data.quitado != null && fields() && d().quitado == null && d().quitadoPor == null)
+          );
+          allow delete: if false;
+        }
+      }
+
+      // Conteos cerrados del evento. "Borrar" solo los oculta (archivado).
+      match /guardados/{gid} {
+        allow read: if isMember(eid);
+        allow create: if isMemberAfter(eid)
+          && d().keys().hasOnly(savedKeys().concat(['conteo', 'por', 'origen', 'archivado', 'archivadoPor']))
+          && savedFields(d())
+          && (d().conteo == null || d().conteo is string)
+          && d().por == uid() && d().origen in ['cierre', 'celular']
+          && d().archivado == null && d().archivadoPor == null;
+        allow update: if isMember(eid) && (
+          d() == resource.data
+          || (resource.data.archivado == null && changed().hasOnly(['archivado', 'archivadoPor'])
+            && d().archivado is int && d().archivadoPor == uid())
+        );
+        allow delete: if false;
       }
     }
   }

@@ -13,10 +13,12 @@
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.2",
+    "@firebase/rules-unit-testing": "5.0.2",
     "esbuild": "0.28.2",
     "firebase": "12.19.0"
   },
   "scripts": {
-    "build:firebase": "esbuild src/firebase.js --bundle --format=esm --minify --legal-comments=none --outfile=www/vendor/firebase.js"
+    "build:firebase": "esbuild src/firebase.js --bundle --format=esm --minify --legal-comments=none --outfile=www/vendor/firebase.js",
+    "test:rules": "firebase emulators:exec --only firestore --project contador-app-54f65 \"node --test tests/rules.test.mjs\""
   }
 }
