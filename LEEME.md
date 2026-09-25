@@ -18,6 +18,16 @@
 - Android incluye esos datos en la copia de seguridad de Google del teléfono.
 - En **Guardados → Enviar respaldo** mandas un CSV a WhatsApp o Drive (se abre en Excel).
 
+## Contar con varios celulares a la vez
+1. En un celular toca el botón de **personas** (arriba a la derecha) → **Crear evento compartido**. Aparece un código de 6 letras, por ejemplo `46A7VF`.
+2. Toca **Compartir código** y mándalo por WhatsApp a los demás.
+3. En cada otro celular: botón de **personas** → escribe el código → **Unirse**.
+4. Listo: cada toque en cualquier celular se suma al mismo total y todos lo ven al instante. El botón de personas se pone verde cuando estás en un evento.
+- Para crear o unirse hace falta internet. Después, si se va la señal, sigue contando y lo envía solo cuando vuelve.
+- **Cerrar y guardar** guarda el conteo en **Guardados** de todos los celulares y lo pone en cero para todos.
+- **Deshacer** quita solo el último toque hecho en ese celular.
+- **Salir del evento** vuelve al conteo normal de ese celular; el evento sigue en los demás y puedes volver con el mismo código.
+
 ## Actualizar
 Cambia `www/index.html`, sube el cambio y descarga el nuevo APK. Instálalo encima: los datos se conservan porque la firma (`keystore/debug.keystore`, guardada en el secret `DEBUG_KEYSTORE_BASE64`) es siempre la misma. **No borres esa carpeta ni el secret.**
 

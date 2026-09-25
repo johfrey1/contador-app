@@ -1,0 +1,35 @@
+rules_version = '2';
+// Reglas de seguridad de Firestore. Se publican en Firebase → Firestore Database → Reglas.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function count(v) { return v is int && v >= 0 && v < 1000000; }
+    function when(v) { return v == null || v is int; }
+
+    // Un evento compartido. Solo se lee con el código exacto (no se pueden listar).
+    match /eventos/{code} {
+      allow get: if signedIn();
+      allow create: if signedIn() && code.matches('^[A-HJ-NP-Z2-9]{6}$')
+        && request.resource.data.keys().hasOnly(['h', 'm', 'j', 'inicio', 'creado', 'actualizado'])
+        && count(request.resource.data.h) && count(request.resource.data.m) && count(request.resource.data.j)
+        && when(request.resource.data.inicio) && request.resource.data.creado is int && request.resource.data.actualizado is int;
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['h', 'm', 'j', 'inicio', 'actualizado'])
+        && count(request.resource.data.h) && count(request.resource.data.m) && count(request.resource.data.j)
+        && when(request.resource.data.inicio) && request.resource.data.actualizado is int;
+      allow list, delete: if false;
+
+      // Conteos cerrados del evento (pestaña Guardados).
+      match /guardados/{id} {
+        allow read, delete: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['nombre', 'hombres', 'mujeres', 'jovenes', 'total', 'fecha', 'inicio'])
+          && request.resource.data.nombre is string && request.resource.data.nombre.size() <= 60
+          && count(request.resource.data.hombres) && count(request.resource.data.mujeres)
+          && count(request.resource.data.jovenes) && count(request.resource.data.total)
+          && request.resource.data.fecha is int && when(request.resource.data.inicio);
+        allow update: if false;
+      }
+    }
+  }
+}

@@ -11,6 +11,11 @@
     "@capacitor/share": "8.0.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "8.5.2"
+    "@capacitor/cli": "8.5.2",
+    "esbuild": "0.28.2",
+    "firebase": "12.19.0"
+  },
+  "scripts": {
+    "build:firebase": "esbuild src/firebase.js --bundle --format=esm --minify --legal-comments=none --outfile=www/vendor/firebase.js"
   }
 }

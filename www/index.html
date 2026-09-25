@@ -49,6 +49,10 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.95rem;margin:-6px 4px 14px;min-height:22px}
 .status .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);transition:opacity .2s}
 .status.saving .dot{background:var(--j)}
+.status.offline .dot{background:var(--muted)}
+.status.error .dot{background:var(--m)}
+.headBtns{display:flex;gap:10px}
+.circle.linked{border-color:var(--ok);color:var(--ok)}
 
 /* total */
 .totalCard{background:var(--card);border:1.5px solid var(--line);border-radius:28px;padding:16px 22px;
@@ -123,9 +127,18 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .acts{display:flex;gap:10px}
 .btn{flex:1;min-height:58px;border-radius:20px;border:1.5px solid var(--line);background:var(--card-2);font-weight:700;font-size:1.05rem}
 .btn.primary{background:linear-gradient(160deg,#3D7BFF,#0B2FB5);border-color:transparent;color:#fff}
+.btn.full{width:100%;flex:none}
+.btn:disabled{opacity:.6}
+.or{text-align:center;color:var(--muted);margin:16px 0 12px;font-size:.9rem}
+.field.code{text-align:center;letter-spacing:.3em;font-weight:800;text-transform:uppercase;font-size:1.5rem}
+.bigcode{font-size:2.6rem;font-weight:900;letter-spacing:.2em;text-align:center;padding:18px 8px;border-radius:20px;background:var(--bg);
+  border:1.5px dashed var(--line);margin-bottom:16px;-webkit-user-select:all;user-select:all}
+.panel .err{color:var(--m);min-height:1.2em;margin:12px 0 0;font-weight:600}
+.panel .gap{margin-top:10px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(112px + env(safe-area-inset-bottom,0px));
   background:var(--ok);color:#fff;font-weight:700;padding:12px 20px;border-radius:16px;opacity:0;transition:opacity .2s;z-index:20;pointer-events:none}
 .toast.show{opacity:1}
+.toast.bad{background:var(--m)}
 @media (prefers-reduced-motion:reduce){.pad,.glow,.toast{transition:none}.pad.hit .fx{animation:none}}
 </style>
 </head>
@@ -136,9 +149,14 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 <main class="view on" id="v-home">
   <div class="head">
     <div class="brand">Contador</div>
-    <button class="circle" id="theme" aria-label="Cambiar tema">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-    </button>
+    <div class="headBtns">
+      <button class="circle" id="sync" aria-label="Contar con otros celulares">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.5a6.5 6.5 0 0 1 3 5.5"/></svg>
+      </button>
+      <button class="circle" id="theme" aria-label="Cambiar tema">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+    </div>
   </div>
   <div class="status" id="status"><i class="dot"></i><span id="statusTxt">Guardado automático activo</span></div>
 
@@ -184,13 +202,39 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t">
   <div class="panel">
     <h2 id="sh-t">Cerrar conteo</h2>
-    <p>Queda en Guardados y el contador vuelve a cero.</p>
+    <p id="sh-p">Queda en Guardados y el contador vuelve a cero.</p>
     <div class="sum" id="sum"></div>
     <input class="field" id="name" placeholder="Nombre del evento (opcional)" maxlength="60">
     <div class="acts">
       <button class="btn" id="cancel">Cancelar</button>
       <button class="btn primary" id="confirm">Cerrar y guardar</button>
     </div>
+  </div>
+</div>
+<!-- Contar con otros celulares -->
+<div class="sheet" id="syncSheet" role="dialog" aria-modal="true" aria-labelledby="sy-t">
+  <div class="panel">
+    <h2 id="sy-t">Contar con otros celulares</h2>
+    <div id="syncOff">
+      <p>Crea un evento y comparte el código. Todos los celulares con ese código suman al mismo conteo en tiempo real.</p>
+      <button class="btn primary full" id="create">Crear evento compartido</button>
+      <div class="or">o únete con un código</div>
+      <input class="field code" id="code" placeholder="CÓDIGO" maxlength="6" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
+      <div class="acts">
+        <button class="btn" id="syncCancel">Cancelar</button>
+        <button class="btn primary" id="join">Unirse</button>
+      </div>
+    </div>
+    <div id="syncOn">
+      <p>Comparte este código con los demás celulares:</p>
+      <div class="bigcode" id="bigcode"></div>
+      <div class="acts">
+        <button class="btn" id="leave">Salir del evento</button>
+        <button class="btn primary" id="shareCode">Compartir código</button>
+      </div>
+      <button class="btn full gap" id="syncClose">Cerrar</button>
+    </div>
+    <p class="err" id="syncErr" role="alert"></p>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -212,70 +256,168 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
       localStorage.setItem(k,s); }catch(e){} }
   };
 
-  const KEY_CUR="contador:actual", KEY_HIST="contador:historial", KEY_THEME="contador:tema";
+  const KEY_CUR="contador:actual", KEY_HIST="contador:historial", KEY_THEME="contador:tema", KEY_EVT="contador:evento";
   const blank=()=>({h:0,m:0,j:0,taps:[],inicio:null,updatedAt:0});
   const fmt=ms=>{try{return new Date(ms).toLocaleString("es-CO",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}catch(e){return ""}};
+  const hora=()=>new Date().toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"});
   const buzz=ms=>{try{navigator.vibrate&&navigator.vibrate(ms)}catch(e){}};
+  const toast=(msg,bad)=>{ const t=$("toast"); t.textContent=msg; t.classList.toggle("bad",!!bad); t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),bad?3000:1600); };
 
   let theme = await store.get(KEY_THEME,"dark");
   let cur = await store.get(KEY_CUR,null); if(!cur||typeof cur!=="object") cur=blank();
   cur.taps = Array.isArray(cur.taps)?cur.taps.slice(-500):[];
   let hist = await store.get(KEY_HIST,[]); if(!Array.isArray(hist)) hist=[];
+  // Evento compartido al que está unido este celular: {code, taps:[]} o null
+  let evt = await store.get(KEY_EVT,null); if(!evt||typeof evt.code!=="string") evt=null;
+  if(evt) evt.taps=Array.isArray(evt.taps)?evt.taps.slice(-500):[];
 
   const applyTheme=()=>{ theme==="light"?document.documentElement.setAttribute("data-theme","light"):document.documentElement.removeAttribute("data-theme"); };
   applyTheme();
   $("theme").addEventListener("click",()=>{ theme=theme==="light"?"dark":"light"; store.set(KEY_THEME,theme); applyTheme(); });
 
-  const total=()=>cur.h+cur.m+cur.j;
+  // ---------- Sincronización entre celulares (Firebase) ----------
+  const FB_CONFIG={
+    apiKey:"AIzaSyDOIuDttfzVRFAORfcF8kUyWsgWyB5ns6M",
+    authDomain:"contador-app-54f65.firebaseapp.com",
+    projectId:"contador-app-54f65",
+    storageBucket:"contador-app-54f65.firebasestorage.app",
+    messagingSenderId:"862536289329",
+    appId:"1:862536289329:web:0d2eea4231f694fc845910"
+  };
+  const CODE_CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0/O ni 1/I para no confundir
+  let fbReady=null, fb=null;
+  function initFb(){
+    if(!fbReady) fbReady=(async()=>{
+      const F=await import("./vendor/firebase.js");
+      const app=F.initializeApp(FB_CONFIG);
+      const auth=F.initializeAuth(app,{persistence:[F.indexedDBLocalPersistence,F.browserLocalPersistence]});
+      const db=F.initializeFirestore(app,{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})});
+      const user=await new Promise(res=>{ const off=F.onAuthStateChanged(auth,u=>{ off(); res(u); }); });
+      if(!user) await F.signInAnonymously(auth);
+      fb={F,db}; return fb;
+    })().catch(e=>{ fbReady=null; throw e; });
+    return fbReady;
+  }
+  const evtRef=()=>fb.F.doc(fb.db,"eventos",evt.code);
+  const histCol=()=>fb.F.collection(fb.db,"eventos",evt.code,"guardados");
+
+  let shared=null, sharedHist=[], unsubs=[];
+  function setStatus(txt,cls){ const s=$("status"); s.className="status"+(cls?" "+cls:""); $("statusTxt").textContent=txt; }
+  function syncStatus(meta){
+    if(!evt) return;
+    if(meta&&meta.hasPendingWrites) setStatus(navigator.onLine?"Evento "+evt.code+" · enviando…":"Evento "+evt.code+" · sin conexión, se envía al volver","offline");
+    else if(meta&&meta.fromCache) setStatus("Evento "+evt.code+" · sin conexión","offline");
+    else setStatus("Evento "+evt.code+" · sincronizado "+hora());
+  }
+  function stopListening(){ unsubs.forEach(f=>f()); unsubs=[]; shared=null; sharedHist=[]; }
+  async function listen(){
+    stopListening();
+    setStatus("Evento "+evt.code+" · conectando…","offline");
+    try{ await initFb(); }catch(e){ setStatus("Evento "+evt.code+" · no se pudo conectar","error"); return; }
+    const F=fb.F;
+    unsubs.push(F.onSnapshot(evtRef(),{includeMetadataChanges:true},snap=>{
+      if(!snap.exists()){ if(!snap.metadata.fromCache) setStatus("El evento "+evt.code+" ya no existe","error"); return; }
+      const d=snap.data(); shared={h:Math.max(0,d.h|0),m:Math.max(0,d.m|0),j:Math.max(0,d.j|0),inicio:d.inicio||null};
+      if(total()===0&&evt.taps.length){ evt.taps=[]; store.set(KEY_EVT,evt); }
+      render(); syncStatus(snap.metadata);
+    },()=>setStatus("Evento "+evt.code+" · sin permiso para leer","error")));
+    unsubs.push(F.onSnapshot(F.query(histCol(),F.orderBy("fecha","desc"),F.limit(300)),snap=>{
+      sharedHist=snap.docs.map(x=>Object.assign({},x.data(),{id:x.id,shared:true}));
+      if(view==="saved") renderList();
+    },()=>{}));
+  }
+  // Escritura al evento: queda en cola si no hay internet y se envía sola al volver.
+  const writeFailed=()=>toast("No se pudo guardar el cambio en el evento",true);
+  const put=data=>fb.F.setDoc(evtRef(),Object.assign({actualizado:Date.now()},data),{merge:true}).catch(writeFailed);
+
+  // ---------- Conteo ----------
+  const counts=()=>evt?(shared||{h:0,m:0,j:0,inicio:null}):cur;
+  const total=()=>{ const c=counts(); return c.h+c.m+c.j; };
+  const taps=()=>evt?evt.taps:cur.taps;
   function render(){
-    $("n-h").textContent=cur.h; $("n-m").textContent=cur.m; $("n-j").textContent=cur.j;
+    const c=counts();
+    $("n-h").textContent=c.h; $("n-m").textContent=c.m; $("n-j").textContent=c.j;
     $("tot").textContent=total();
-    $("started").textContent=cur.inicio?"Desde "+fmt(cur.inicio):"Conteo nuevo";
-    $("undo").disabled=cur.taps.length===0; $("reset").disabled=total()===0; $("fab").disabled=total()===0;
+    $("started").textContent=c.inicio?"Desde "+fmt(c.inicio):"Conteo nuevo";
+    $("undo").disabled=taps().length===0; $("reset").disabled=total()===0; $("fab").disabled=total()===0;
+    $("sync").classList.toggle("linked",!!evt);
   }
   function autosave(){
     cur.updatedAt=Date.now(); store.set(KEY_CUR,cur); render();
-    $("statusTxt").textContent="Guardado en el celular · "+new Date().toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"});
+    setStatus("Guardado en el celular · "+hora());
   }
 
   document.querySelectorAll(".pad").forEach(b=>b.addEventListener("click",()=>{
-    const k=b.dataset.k; if(!cur.inicio) cur.inicio=Date.now();
-    cur[k]++; cur.taps.push(k); if(cur.taps.length>500) cur.taps.shift();
-    autosave(); buzz(25); b.classList.remove("hit"); void b.offsetWidth; b.classList.add("hit");
+    const k=b.dataset.k;
+    if(evt){
+      if(!fb) return;
+      const upd={[k]:fb.F.increment(1)}; if(!counts().inicio) upd.inicio=Date.now();
+      evt.taps.push(k); if(evt.taps.length>500) evt.taps.shift(); store.set(KEY_EVT,evt); put(upd);
+    }else{
+      if(!cur.inicio) cur.inicio=Date.now();
+      cur[k]++; cur.taps.push(k); if(cur.taps.length>500) cur.taps.shift();
+      autosave();
+    }
+    buzz(25); b.classList.remove("hit"); void b.offsetWidth; b.classList.add("hit");
   }));
-  $("undo").addEventListener("click",()=>{ const k=cur.taps.pop(); if(k&&cur[k]>0) cur[k]--; autosave(); buzz([15,40,15]); });
-  $("reset").addEventListener("click",()=>{ if(confirm("¿Poner el contador en cero sin guardarlo?")){ cur=blank(); autosave(); } });
+  $("undo").addEventListener("click",()=>{
+    if(evt){
+      if(!fb) return;
+      const k=evt.taps.pop(); store.set(KEY_EVT,evt);
+      if(k&&counts()[k]>0) put({[k]:fb.F.increment(-1)}); else render();
+    }else{ const k=cur.taps.pop(); if(k&&cur[k]>0) cur[k]--; autosave(); }
+    buzz([15,40,15]);
+  });
+  $("reset").addEventListener("click",()=>{
+    if(evt){
+      if(!fb||!confirm("¿Poner en cero el conteo del evento para TODOS los celulares, sin guardarlo?")) return;
+      evt.taps=[]; store.set(KEY_EVT,evt); put({h:0,m:0,j:0,inicio:null});
+    }else if(confirm("¿Poner el contador en cero sin guardarlo?")){ cur=blank(); autosave(); }
+  });
 
-  // Guardados
+  // ---------- Guardados ----------
+  function rowFor(it){
+    const r=document.createElement("div"); r.className="row";
+    const ic=document.createElement("div"); ic.className="ic"; ic.textContent=it.total;
+    const info=document.createElement("div"); info.className="info";
+    const nm=document.createElement("div"); nm.className="nm"; nm.textContent=it.nombre||"Sin nombre";
+    const mt=document.createElement("div"); mt.className="mt"; mt.textContent=fmt(it.fecha);
+    const ch=document.createElement("div"); ch.className="chips";
+    [["H",it.hombres,"var(--h)"],["M",it.mujeres,"var(--m)"],["J",it.jovenes,"var(--j)"]].forEach(([l,v,c])=>{
+      const sp=document.createElement("span"); sp.className="chip"; sp.style.background=c; sp.textContent=l+" "+v; ch.appendChild(sp); });
+    info.append(nm,mt,ch);
+    const d=document.createElement("button"); d.className="del"; d.setAttribute("aria-label","Borrar conteo");
+    d.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+    d.addEventListener("click",()=>{
+      if(!confirm(it.shared?`¿Borrar "${it.nombre||"Sin nombre"}" en todos los celulares del evento?`:`¿Borrar "${it.nombre||"Sin nombre"}"?`)) return;
+      if(it.shared){ if(fb&&evt) fb.F.deleteDoc(fb.F.doc(histCol(),it.id)).catch(()=>{}); }
+      else{ hist=hist.filter(x=>x.id!==it.id); store.set(KEY_HIST,hist); renderList(); }
+    });
+    r.append(ic,info,d); return r;
+  }
   function renderList(){
     const box=$("list"); box.textContent="";
-    $("export").style.display=hist.length?"block":"none";
-    if(!hist.length){
+    const groups=[];
+    if(evt) groups.push(["EVENTO "+evt.code,sharedHist]);
+    if(hist.length) groups.push([evt?"SOLO EN ESTE CELULAR":"CONTEOS",hist]);
+    const any=groups.some(g=>g[1].length);
+    $("export").style.display=any?"block":"none";
+    if(!any){
       box.innerHTML='<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Aún no has cerrado conteos. Toca el botón azul del centro para guardar uno.</div>';
       return;
     }
-    const sec=document.createElement("div"); sec.className="section"; sec.textContent="CONTEOS"; box.appendChild(sec);
-    hist.forEach(it=>{
-      const r=document.createElement("div"); r.className="row";
-      const ic=document.createElement("div"); ic.className="ic"; ic.textContent=it.total;
-      const info=document.createElement("div"); info.className="info";
-      const nm=document.createElement("div"); nm.className="nm"; nm.textContent=it.nombre||"Sin nombre";
-      const mt=document.createElement("div"); mt.className="mt"; mt.textContent=fmt(it.fecha);
-      const ch=document.createElement("div"); ch.className="chips";
-      [["H",it.hombres,"var(--h)"],["M",it.mujeres,"var(--m)"],["J",it.jovenes,"var(--j)"]].forEach(([l,v,c])=>{
-        const sp=document.createElement("span"); sp.className="chip"; sp.style.background=c; sp.textContent=l+" "+v; ch.appendChild(sp); });
-      info.append(nm,mt,ch);
-      const d=document.createElement("button"); d.className="del"; d.setAttribute("aria-label","Borrar conteo");
-      d.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
-      d.addEventListener("click",()=>{ if(confirm(`¿Borrar "${it.nombre||"Sin nombre"}"?`)){ hist=hist.filter(x=>x.id!==it.id); store.set(KEY_HIST,hist); renderList(); } });
-      r.append(ic,info,d); box.appendChild(r);
+    groups.forEach(([title,items])=>{
+      if(!items.length) return;
+      const sec=document.createElement("div"); sec.className="section"; sec.textContent=title; box.appendChild(sec);
+      items.forEach(it=>box.appendChild(rowFor(it)));
     });
   }
 
   // Respaldo en CSV
   $("export").addEventListener("click",async()=>{
+    const all=(evt?sharedHist:[]).concat(hist);
     const rows=[["Evento","Fecha","Hombres","Mujeres","Jovenes","Total"]]
-      .concat(hist.map(x=>[(x.nombre||"Sin nombre").replace(/[;\n]/g," "),new Date(x.fecha).toLocaleString("es-CO"),x.hombres,x.mujeres,x.jovenes,x.total]));
+      .concat(all.map(x=>[(x.nombre||"Sin nombre").replace(/[;\n]/g," "),new Date(x.fecha).toLocaleString("es-CO"),x.hombres,x.mujeres,x.jovenes,x.total]));
     const csv=rows.map(r=>r.join(";")).join("\n");
     try{
       if(Share) await Share.share({title:"Respaldo de conteos",text:csv,dialogTitle:"Enviar respaldo"});
@@ -299,23 +441,103 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
   // Cerrar conteo
   const sheet=$("sheet");
   $("fab").addEventListener("click",()=>{
-    const s=$("sum"); s.textContent="";
-    [["Hombres",cur.h,"var(--h)"],["Mujeres",cur.m,"var(--m)"],["Jóvenes",cur.j,"var(--j)"]].forEach(([l,v,c])=>{
-      const d=document.createElement("div"); d.style.background=c; const b=document.createElement("b"); b.textContent=v; d.append(b,document.createTextNode(l)); s.appendChild(d); });
+    const c=counts(), s=$("sum"); s.textContent="";
+    [["Hombres",c.h,"var(--h)"],["Mujeres",c.m,"var(--m)"],["Jóvenes",c.j,"var(--j)"]].forEach(([l,v,col])=>{
+      const d=document.createElement("div"); d.style.background=col; const b=document.createElement("b"); b.textContent=v; d.append(b,document.createTextNode(l)); s.appendChild(d); });
+    $("sh-p").textContent=evt?"Queda en Guardados de todos los celulares del evento y el contador vuelve a cero para todos.":"Queda en Guardados y el contador vuelve a cero.";
     $("name").value=""; sheet.classList.add("open");
   });
   $("cancel").addEventListener("click",()=>sheet.classList.remove("open"));
   sheet.addEventListener("click",e=>{ if(e.target===sheet) sheet.classList.remove("open"); });
   $("confirm").addEventListener("click",()=>{
-    hist.unshift({id:String(Date.now()),nombre:$("name").value.trim().slice(0,60),hombres:cur.h,mujeres:cur.m,jovenes:cur.j,total:total(),fecha:Date.now(),inicio:cur.inicio||null});
-    hist=hist.slice(0,500); store.set(KEY_HIST,hist);
-    cur=blank(); autosave(); sheet.classList.remove("open");
-    const t=$("toast"); t.textContent="Conteo guardado"; t.classList.add("show"); buzz(60); setTimeout(()=>t.classList.remove("show"),1600);
+    const c=counts();
+    const it={nombre:$("name").value.trim().slice(0,60),hombres:c.h,mujeres:c.m,jovenes:c.j,total:total(),fecha:Date.now(),inicio:c.inicio||null};
+    if(evt){
+      if(!fb) return;
+      // Se resta lo guardado (en vez de poner 0) para no perder toques de otros celulares hechos al mismo tiempo.
+      const F=fb.F, b=F.writeBatch(fb.db);
+      b.set(F.doc(histCol(),String(Date.now())+Math.random().toString(36).slice(2,6)),it);
+      const upd={inicio:null,actualizado:Date.now()};
+      ["h","m","j"].forEach(k=>{ if(c[k]) upd[k]=F.increment(-c[k]); }); // increment(-0) viaja como decimal y las reglas lo rechazan
+      b.set(evtRef(),upd,{merge:true});
+      b.commit().catch(writeFailed);
+      evt.taps=[]; store.set(KEY_EVT,evt);
+    }else{
+      hist.unshift(Object.assign({id:String(Date.now())},it));
+      hist=hist.slice(0,500); store.set(KEY_HIST,hist);
+      cur=blank(); autosave();
+    }
+    sheet.classList.remove("open"); toast("Conteo guardado"); buzz(60);
+  });
+
+  // Contar con otros celulares
+  const syncSheet=$("syncSheet");
+  function openSync(){
+    $("syncErr").textContent=""; $("code").value="";
+    $("syncOff").style.display=evt?"none":"block"; $("syncOn").style.display=evt?"block":"none";
+    if(evt) $("bigcode").textContent=evt.code;
+    syncSheet.classList.add("open");
+  }
+  const closeSync=()=>syncSheet.classList.remove("open");
+  $("sync").addEventListener("click",openSync);
+  $("syncCancel").addEventListener("click",closeSync);
+  $("syncClose").addEventListener("click",closeSync);
+  syncSheet.addEventListener("click",e=>{ if(e.target===syncSheet) closeSync(); });
+  $("code").addEventListener("input",e=>{ e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,""); });
+
+  async function busy(btn,fn){
+    const bs=[$("create"),$("join")]; bs.forEach(x=>x.disabled=true); const old=btn.textContent; btn.textContent="Conectando…"; $("syncErr").textContent="";
+    try{ await fn(); }
+    catch(e){ $("syncErr").textContent=navigator.onLine?"No se pudo conectar. Intenta de nuevo.":"Necesitas internet para crear o unirte a un evento."; }
+    finally{ bs.forEach(x=>x.disabled=false); btn.textContent=old; }
+  }
+  function enter(code){
+    evt={code,taps:[]}; store.set(KEY_EVT,evt);
+    listen(); render(); openSync(); buzz(60);
+  }
+  $("create").addEventListener("click",()=>busy($("create"),async()=>{
+    const {F,db}=await initFb();
+    let code;
+    for(let i=0;i<5&&!code;i++){
+      const rnd=crypto.getRandomValues(new Uint32Array(6));
+      const c=Array.from(rnd,n=>CODE_CHARS[n%CODE_CHARS.length]).join("");
+      if(!(await F.getDocFromServer(F.doc(db,"eventos",c))).exists()) code=c;
+    }
+    if(!code) throw new Error("sin código");
+    // El conteo que ya había en este celular pasa al evento.
+    await F.setDoc(F.doc(db,"eventos",code),{h:cur.h,m:cur.m,j:cur.j,inicio:cur.inicio||null,creado:Date.now(),actualizado:Date.now()});
+    cur=blank(); store.set(KEY_CUR,cur);
+    enter(code);
+  }));
+  $("join").addEventListener("click",()=>{
+    const code=$("code").value.trim();
+    if(code.length!==6){ $("syncErr").textContent="El código tiene 6 letras o números."; return; }
+    busy($("join"),async()=>{
+      const {F,db}=await initFb();
+      const snap=await F.getDocFromServer(F.doc(db,"eventos",code));
+      if(!snap.exists()){ $("syncErr").textContent="No existe un evento con el código "+code+"."; return; }
+      enter(code);
+    });
+  });
+  $("shareCode").addEventListener("click",async()=>{
+    const text="Únete a mi conteo en la app Contador: toca el botón de personas y escribe el código "+evt.code;
+    try{
+      if(Share) await Share.share({title:"Código del evento",text,dialogTitle:"Compartir código"});
+      else if(navigator.share) await navigator.share({title:"Código del evento",text});
+      else if(navigator.clipboard){ await navigator.clipboard.writeText(evt.code); toast("Código copiado"); }
+    }catch(e){}
+  });
+  $("leave").addEventListener("click",()=>{
+    if(!confirm("¿Salir del evento "+evt.code+"? El conteo sigue en los otros celulares y puedes volver a unirte con el mismo código.")) return;
+    stopListening(); evt=null; store.set(KEY_EVT,null);
+    closeSync(); render(); setStatus("Guardado automático en el celular");
+    if(view==="saved") renderList();
   });
 
   // Botón atrás de Android
   if(App) App.addListener("backButton",()=>{
-    if(sheet.classList.contains("open")) sheet.classList.remove("open");
+    if(syncSheet.classList.contains("open")) closeSync();
+    else if(sheet.classList.contains("open")) sheet.classList.remove("open");
     else if(view!=="home") show("home");
     else App.minimizeApp();
   });
@@ -328,7 +550,7 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
     try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
   }
   render();
-  $("statusTxt").textContent="Guardado automático en el celular";
+  if(evt) listen(); else setStatus("Guardado automático en el celular");
 })();
 </script>
 

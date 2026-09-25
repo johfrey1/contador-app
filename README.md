@@ -7,10 +7,14 @@ App para contar asistentes (hombres, mujeres, jóvenes) con guardado local en el
 - Guardado en el almacenamiento interno de la app (no se pierde al borrar datos del navegador).
 - Respaldo en CSV desde **Guardados → Enviar respaldo** (WhatsApp, Drive, Excel).
 - Funciona sin conexión.
+- **Conteo compartido entre celulares** en tiempo real (Firebase): un celular crea un evento, los demás se unen con el código de 6 letras y todos suman al mismo conteo. Sin internet sigue contando y sincroniza al volver la señal.
 
 ## Estructura
 ```
 www/                      App web (index.html, service worker, manifest, íconos)
+www/vendor/firebase.js    SDK de Firebase empaquetado (se genera con `npm run build:firebase`)
+src/firebase.js           Qué partes del SDK de Firebase se empaquetan
+firestore.rules           Reglas de seguridad de Firestore (proyecto contador-app-54f65)
 capacitor.config.json     Configuración de Capacitor (appId: com.john.contador)
 .github/workflows/        Compilación automática del APK
 LEEME.md                  Guía de instalación paso a paso
@@ -26,6 +30,12 @@ npx cap add android
 npx cap sync android
 cd android && ./gradlew assembleDebug
 ```
+
+## Sincronización (Firebase)
+- Proyecto: `contador-app-54f65` (plan gratuito Spark). Usa Firestore e inicio de sesión anónimo.
+- Datos: `eventos/{código}` guarda `h`, `m`, `j` (se suman con incrementos atómicos para no perder toques simultáneos) y `eventos/{código}/guardados` los conteos cerrados.
+- Si cambias `firestore.rules`, publícalas en Firebase → Firestore Database → Reglas (o `firebase deploy --only firestore:rules`).
+- Para actualizar el SDK: cambia la versión de `firebase` en `package.json`, `npm install` y `npm run build:firebase`.
 
 ## iPhone
 La carpeta `www` se puede publicar como sitio estático (por ejemplo en Vercel, con Root Directory `www`) e instalar desde Safari con **Agregar a pantalla de inicio**.
