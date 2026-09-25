@@ -209,6 +209,15 @@ body.kb .nav{display:none}
 .bigcode{font-size:2.3rem;font-weight:900;letter-spacing:.12em;text-align:center;padding:18px 8px;border-radius:20px;background:var(--bg);
   border:1.5px dashed var(--line);margin-bottom:16px;-webkit-user-select:all;user-select:all}
 .panel .gap{margin-top:10px}
+.opt{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px;margin-bottom:12px;border-radius:22px;
+  border:1.5px solid var(--line);background:var(--card-2)}
+.opt:active{transform:scale(.99)}
+.opt:disabled{opacity:.6}
+.opt .oi{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;flex:none;color:#fff;background:linear-gradient(160deg,#3D7BFF,#0B2FB5)}
+.opt .oi.alt{background:linear-gradient(160deg,#25C26E,#128C4B)}
+.opt .oi svg{width:26px;height:26px}
+.opt .ot b{display:block;font-size:1.15rem;font-weight:800}
+.opt .ot span{display:block;color:var(--muted);font-size:.9rem;margin-top:3px;line-height:1.35}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(112px + env(safe-area-inset-bottom,0px));
   background:var(--ok);color:#fff;font-weight:700;padding:12px 20px;border-radius:16px;opacity:0;transition:opacity .2s;z-index:20;pointer-events:none}
 .toast.show{opacity:1}
@@ -345,13 +354,23 @@ body.kb .nav{display:none}
 <div class="sheet" id="syncSheet" role="dialog" aria-modal="true" aria-labelledby="sy-t">
   <div class="panel">
     <h2 id="sy-t">Contar con otros celulares</h2>
-    <div id="syncOff">
-      <p>Comparte el conteo que tienes abierto: los demás celulares suman al mismo conteo en tiempo real. Tus Guardados también se suben.</p>
-      <button class="btn primary full" id="create">Compartir este conteo</button>
-      <div class="or">o únete con el código que te enviaron</div>
+    <div id="syncMenu">
+      <p>Elige una opción:</p>
+      <button class="opt" id="create">
+        <span class="oi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg></span>
+        <span class="ot"><b>Generar código</b><span>Comparte el conteo que tienes abierto. Otro celular entra con el código y suman juntos.</span></span>
+      </button>
+      <button class="opt" id="goJoin">
+        <span class="oi alt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg></span>
+        <span class="ot"><b>Ingresar código</b><span>Únete al conteo de otro celular con el código que te enviaron.</span></span>
+      </button>
+      <button class="btn full" id="syncCancel">Cancelar</button>
+    </div>
+    <div id="syncJoin">
+      <p>Escribe el código de 8 letras que te enviaron. Cada código sirve para un solo celular.</p>
       <input class="field code" id="code" placeholder="XXXX-XXXX" maxlength="9" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
       <div class="acts">
-        <button class="btn" id="syncCancel">Cancelar</button>
+        <button class="btn" id="joinBack">Volver</button>
         <button class="btn primary" id="join">Unirse</button>
       </div>
     </div>
@@ -1094,7 +1113,7 @@ body.kb .nav{display:none}
   }
   async function openSync(){
     $("syncErr").textContent=""; $("code").value="";
-    $("syncOff").style.display=evt?"none":"block"; $("syncOn").style.display=evt?"block":"none";
+    syncView(evt?"on":"menu");
     syncSheet.classList.add("open");
     if(!evt) return;
     showInv();
@@ -1105,6 +1124,13 @@ body.kb .nav{display:none}
     }catch(e){}
   }
   const closeSync=()=>closeSheet(syncSheet);
+  function syncView(v){
+    $("syncMenu").style.display=v==="menu"?"block":"none"; $("syncJoin").style.display=v==="join"?"block":"none"; $("syncOn").style.display=v==="on"?"block":"none";
+    $("sy-t").textContent=v==="join"?"Ingresar código":v==="on"?"Código para compartir":"Contar con otros celulares";
+    $("syncErr").textContent="";
+  }
+  $("goJoin").addEventListener("click",()=>{ syncView("join"); $("code").value=""; $("code").focus(); });
+  $("joinBack").addEventListener("click",()=>syncView("menu"));
   $("sync").addEventListener("click",openSync);
   $("syncCancel").addEventListener("click",closeSync);
   $("syncClose").addEventListener("click",closeSync);
@@ -1114,11 +1140,11 @@ body.kb .nav{display:none}
 
   const say=msg=>Object.assign(new Error(msg),{say:msg});
   async function busy(btn,fn){
-    const bs=[$("create"),$("join"),$("newCode"),$("shareCode")], old=btn.textContent;
-    bs.forEach(x=>x.disabled=true); btn.textContent="Conectando…"; $("syncErr").textContent="";
+    const bs=[$("create"),$("goJoin"),$("join"),$("newCode"),$("shareCode")], old=btn.innerHTML, lbl=btn.querySelector("b")||btn;
+    bs.forEach(x=>x.disabled=true); lbl.textContent="Conectando…"; $("syncErr").textContent="";
     try{ await fn(); }
     catch(e){ $("syncErr").textContent=e&&e.say?e.say:navigator.onLine?"No se pudo conectar. Intenta de nuevo.":"Necesitas internet para esto."; }
-    finally{ bs.forEach(x=>x.disabled=false); btn.textContent=old; }
+    finally{ bs.forEach(x=>x.disabled=false); btn.innerHTML=old; }
   }
   async function newInvite(){
     const {F,db,uid}=await initFb();
