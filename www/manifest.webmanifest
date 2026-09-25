@@ -1,6 +1,6 @@
 {
-  "name": "Contador de asistentes",
-  "short_name": "Contador",
+  "name": "Contador MIRA",
+  "short_name": "Contador MIRA",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

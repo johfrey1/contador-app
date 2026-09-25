@@ -28,6 +28,9 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Usar el ícono de la app
+        run: cp -R resources/android/res/. android/app/src/main/res/
+
       - name: Usar siempre la misma firma (para poder actualizar sin perder datos)
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
