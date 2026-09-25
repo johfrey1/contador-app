@@ -48,9 +48,8 @@ Quien compartió el conteo ve, en **Compartir**, la lista de **celulares conecta
 Cambia `www/index.html`, sube el cambio y descarga el nuevo APK. Instálalo encima: los datos se conservan porque la firma (`keystore/debug.keystore`, guardada en el secret `DEBUG_KEYSTORE_BASE64`) es siempre la misma. **No borres esa carpeta ni el secret.**
 
 ## iPhone (sin App Store)
-La misma carpeta `www` funciona como app instalable en iPhone.
-1. En Vercel: **Add New → Project**, importa este repositorio y en **Root Directory** elige `www`. Framework: **Other**. Deploy.
-2. En el iPhone abre la URL en **Safari** → botón **Compartir** → **Agregar a pantalla de inicio**.
-3. Ábrela una vez con internet. Desde ahí funciona sin conexión y guarda en el iPhone.
+La app está publicada en **https://contador-mira.vercel.app** (proyecto `contador-mira` en Vercel). Es la misma app del APK, con respaldo en la nube y conteo compartido con los Android.
+1. En el iPhone abre **https://contador-mira.vercel.app** en **Safari** → botón **Compartir** → **Agregar a pantalla de inicio**.
+2. Ábrela desde el ícono con internet una vez. Desde ahí funciona sin conexión.
 - Usa siempre el ícono de la pantalla de inicio (no la pestaña de Safari): ahí los datos quedan en el almacenamiento de la app.
-- Haz respaldo seguido con **Guardados → Enviar respaldo**.
+- Para actualizarla después de un cambio: copia la carpeta `www` a otro lugar y ejecuta ahí `vercel deploy --prod` (o conecta el repositorio en Vercel con Root Directory `www`).
